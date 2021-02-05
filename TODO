@@ -1,0 +1,27 @@
+CLIENT
+
+- Threading: 3 channels
+    - IO Networking Thread
+    - GUI Thread
+    - FFMPEG Thread(s)
+    - Wakeup Thread for IO
+
+    Channels:
+
+    - GUI to IO
+    - IO to GUI
+    - FFMPEG to IO
+    - GUI to FFMPEG
+
+UDP Hole Punching:
+    - C1 calls C2 VIA server
+    - C1 starts sending packets to server through UDP
+    - C2 picks up
+    - C2 start sending packet to server through UDP
+    - server informs both C1 and C2 
+    that they can start connecting
+
+    - C1 starts sending packets to C2
+    - C2 starts sending packets to C1
+
+    - Connection established
