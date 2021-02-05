@@ -1,7 +1,9 @@
+#[cfg(feature = "client")]
 mod client;
 mod server;
 mod common;
 
+#[cfg(feature = "client")]
 use client::client::start_client;
 use server::server::RendezvousServer;
 
@@ -15,8 +17,9 @@ pub fn main() {
         let server = RendezvousServer::start_server();
     }
     else if args.len() >= 2 && args.len() <= 3 {
-        if args[1].starts_with("c") {
+        if cfg!(feature = "client") && args[1].starts_with("c") {
             println!("Starting as client");
+            #[cfg(feature = "client")]
             start_client();
         }
         else if args[1].starts_with("s") {

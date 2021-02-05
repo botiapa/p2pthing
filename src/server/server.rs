@@ -1,11 +1,7 @@
 use MsgTypes::Call;
-use dxgcap::DXGIManager;
 use serde::Serialize;
-use std::{collections::HashMap, io, net::SocketAddr, process::{Command, Stdio}, str::FromStr, time::{Instant}};
+use std::{collections::HashMap, io, net::SocketAddr, str::FromStr, time::{Instant}};
 use std::io::{Write, Read};
-use std::thread;
-use std::sync::mpsc;
-use spin_sleep::LoopHelper;
 //use scrap;
 use mio::{Events, Interest, Poll, Token, net::UdpSocket};
 use mio::net::{TcpListener, TcpStream};
@@ -295,7 +291,7 @@ impl RendezvousServer {
     }
 }
 
-
+/*
 fn start_recording() {
     let mut dxgi = DXGIManager::new(100).unwrap();
     dxgi.set_capture_source_index(0);
@@ -366,3 +362,4 @@ fn start_recording() {
     child.wait().expect("child process wasn't running");*/
 
 }
+ */
