@@ -5,7 +5,7 @@ use super::{connection_manager::{ConnectionManager}, tui::Tui};
 pub fn start_client() {
     let (ui_s, ui_r) = mpsc::channel();
 
-    let (cm_s, cm_thr, waker) = ConnectionManager::start("127.0.0.1:42069", ui_s.clone());
+    let (cm_s, cm_thr, waker) = ConnectionManager::start("138.68.69.243:42069", ui_s.clone());
 
     let wake_for_tui = waker.clone();
     

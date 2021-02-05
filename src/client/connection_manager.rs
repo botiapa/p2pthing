@@ -77,7 +77,7 @@ impl ConnectionManager {
         let waker = Arc::new(Waker::new(poll.registry(), Token(next_token)).unwrap());
         next_token += 1;
 
-        let mut udp_socket = UdpSocket::bind(SocketAddr::from_str("127.0.0.1:0").unwrap()).unwrap();
+        let mut udp_socket = UdpSocket::bind(SocketAddr::from_str("0.0.0.0:0").unwrap()).unwrap();
         udp_connections.push(UdpConnection{
             address: rend_ip,
             last_keep_alive: None,
@@ -259,6 +259,7 @@ impl ConnectionManager {
         let msg = MsgTypes::Announce {
             public_key: self.encryption.get_public_key()
         };
+        thread::sleep(Duration::from_secs(1)); // FIXME: Remove this
         self.send_tcp_message(MsgType::Announce, &msg);
     }
 
@@ -305,8 +306,8 @@ impl ConnectionManager {
                     last_announce: None,
                     state: UdpConnectionState::MidCall,
                 };
-
                 self.udp_connections.push(conn);
+                self.waker_thread.send(InterthreadMessage::SetWakepDelay(KEEP_ALIVE_DELAY_MIDCALL)).unwrap();
             }
             Some(MsgType::CallResponse) => {
                 let call_response: MsgTypes::Call = bincode::deserialize(&mut msg[..]).unwrap();
@@ -341,7 +342,6 @@ impl ConnectionManager {
                 self.udp_connections.iter_mut()
                 .find(|x| x.address == addr).unwrap()
                 .state = UdpConnectionState::Connected;
-                println!("UDP Announced");
                 // TODO: Log that it's connected
             }
             Some(MsgType::KeepAlive) => {
@@ -349,6 +349,10 @@ impl ConnectionManager {
                 self.udp_connections.iter_mut()
                 .find(|x| x.address == addr).unwrap()
                 .state = UdpConnectionState::Connected;
+                if self.udp_connections.iter_mut().filter(|conn| match conn.state { UdpConnectionState::MidCall => true, _ => false}).count() == 0 {
+                    self.waker_thread.send(InterthreadMessage::SetWakepDelay(KEEP_ALIVE_DELAY)).unwrap();
+                }
+                
             }
             Some(MsgType::ChatMessage) => {
                 let msg :MsgTypes::ChatMessage = bincode::deserialize(&buf[1..]).unwrap();

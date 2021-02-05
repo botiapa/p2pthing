@@ -8,10 +8,11 @@ edition = "2018"
 
 [features]
 
-default = ["server"]
+default = ["server", "client"]
 
 server = []
-client = ["dxgcap", "crossterm", "tui"]
+client = ["crossterm", "tui"]
+win = ["dxgcap"]
 
 [dependencies]
 rgb2yuv420 = "0.2.3"
