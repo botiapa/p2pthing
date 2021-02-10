@@ -1,3 +1,29 @@
+TODO / MAIN ARCHITECTURE
+
+TODO
+-----------
+
+- Extend Debug tab with more features
+    - Graphs?
+    - Filtering for specific trace levels
+    - More messages
+- Eliminate wakeup thread from the server as well
+- Add timestamps to chat messages
+- Popup support
+- Audio
+- Encryption
+
+ARCHITECTURE
+-----------
+
+UDP messages
+
+- Split full message into multiple smaller parts
+- Reliable and unreliable message types
+- Message id
+    - Generate randomly
+    - Or +1 everytime
+
 CLIENT
 
 - Threading: 3 channels

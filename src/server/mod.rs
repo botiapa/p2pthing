@@ -1,1 +1,1 @@
-pub mod server;
+pub mod rendezvous_server;

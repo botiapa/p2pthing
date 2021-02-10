@@ -5,7 +5,7 @@ mod common;
 
 #[cfg(feature = "client")]
 use client::client::start_client;
-use server::server::RendezvousServer;
+use server::rendezvous_server::RendezvousServer;
 
 use std::env;
 
