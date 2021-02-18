@@ -1,5 +1,4 @@
 use std::net::SocketAddr;
-use cpal::Device;
 use num_derive::{FromPrimitive, ToPrimitive};
 use serde::{Serialize, Deserialize};
 

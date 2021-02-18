@@ -105,7 +105,7 @@ impl ConnectionManager {
         }
     }
 
-    pub fn start(rend_ip: String, ui_s: Sender<InterthreadMessage>) -> (mio_misc::channel::Sender<InterthreadMessage>, JoinHandle<()>, Arc<Waker>, NetworkedPublicKey) {
+    pub fn start(rend_ip: String, ui_s: Sender<InterthreadMessage>) -> (mio_misc::channel::Sender<InterthreadMessage>, JoinHandle<()>, NetworkedPublicKey) {
         let poll = Poll::new().unwrap();
         let waker = Arc::new(Waker::new(poll.registry(), WAKER).unwrap());
         let queue = Arc::new(NotificationQueue::new(waker.clone()));
@@ -120,7 +120,7 @@ impl ConnectionManager {
             mgr.event_loop(&mut cm_r);
         });
         
-        (cm_s, thr, waker, key)
+        (cm_s, thr, key)
     }
 
     pub fn call(s: &Sender<InterthreadMessage>, public_key: NetworkedPublicKey) {
