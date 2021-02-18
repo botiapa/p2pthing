@@ -1,7 +1,7 @@
 use std::{net::SocketAddr, time::Instant};
 
 use msg_types::{AnnouncePublic, AnnounceSecret, CallResponse};
-use mio::{Token, net::TcpStream};
+use mio::Token;
 
 use crate::common::{encryption::SymmetricEncryption, lib::read_exact, message_type::{MsgType, msg_types::{self, Call}, Peer}};
 

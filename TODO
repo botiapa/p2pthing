@@ -7,11 +7,24 @@ TODO
     - Graphs?
     - Filtering for specific trace levels
     - More messages
-- Eliminate wakeup thread from the server as well
 - Add timestamps to chat messages
 - Popup support
 - Audio
-- Encryption
+    - Simple audio recording
+    - Variable bitrate
+        - Change in settings
+- Ping and speed/bandwidth detection
+- Number of wakeups/packets/data /s
+    - Custom audio hooking into applications
+- Implement reliable udp messages
+    - Rewrite chat message type so it uses this system
+- Chat messages fix min
+- Test if next_resendable() actually works correctly
+- Remove disconnected peers
+    - Detect if UDP connections get disconnected
+        - Maybe after 5 lost packets?
+- Audio maybe add packet loss detection (fec in opus)
+- TUI settings tab
 
 ARCHITECTURE
 -----------
@@ -21,8 +34,8 @@ UDP messages
 - Split full message into multiple smaller parts
 - Reliable and unreliable message types
 - Message id
-    - Generate randomly
-    - Or +1 everytime
+    - Incremented every message
+    - Different on every peer
 
 CLIENT
 

@@ -1,11 +1,15 @@
 use std::net::SocketAddr;
 
-use crate::common::message_type::{MsgType, msg_types};
+use crate::common::message_type::{MsgType, UdpPacket, msg_types};
 
 use super::RendezvousServer;
 
 impl RendezvousServer {
-    pub fn read_udp_message(&mut self, read: usize, addr: SocketAddr, buf: &[u8]) {
+    pub fn read_udp_message(&mut self, _: usize, addr: SocketAddr, buf: &[u8]) {
+        let udp_packet: UdpPacket = bincode::deserialize(&buf).unwrap();
+
+        //TODO: Implement server side confirmation, and reliable udp messaging
+        let buf = udp_packet.data;
         let msg_type = buf[0];
         let msg_type = num::FromPrimitive::from_u8(msg_type);
 

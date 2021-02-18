@@ -14,7 +14,7 @@ pub fn main() {
     let args: Vec::<String> = env::args().collect();
     if args.len() == 1 {
         println!("No argument found, assuming server role.");
-        let server = RendezvousServer::start_server();
+        let _ = RendezvousServer::start_server();
     }
     else if args.len() >= 2 && args.len() <= 3 {
         if cfg!(feature = "client") && args[1].starts_with("c") {
@@ -24,7 +24,7 @@ pub fn main() {
         }
         else if args[1].starts_with("s") {
             println!("Starting as server");
-            let server = RendezvousServer::start_server();
+            let _ = RendezvousServer::start_server();
         }
     }
     else {

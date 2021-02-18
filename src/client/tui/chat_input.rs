@@ -1,5 +1,3 @@
-use std::cmp::{max, min};
-
 pub struct ChatInput{
     pub msg: Vec<char>,
     cursor_position: usize

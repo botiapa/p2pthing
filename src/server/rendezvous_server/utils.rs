@@ -3,7 +3,7 @@ use std::{io::Write, net::SocketAddr};
 use mio::net::TcpStream;
 use serde::Serialize;
 
-use crate::common::message_type::MsgType;
+use crate::common::message_type::{MsgEncryption, MsgType, UdpPacket};
 
 use super::RendezvousServer;
 
@@ -17,11 +17,20 @@ impl RendezvousServer {
         sock.write_all(chained).unwrap();
     }
 
-    pub fn send_udp_message<T: ?Sized>(&self, addr: SocketAddr, t: MsgType, msg: &T) where T: Serialize {
+    pub fn send_udp_message<T: ?Sized>(&mut self, addr: SocketAddr, t: MsgType, msg: &T) where T: Serialize {
         let t: u8 = num::ToPrimitive::to_u8(&t).unwrap();
         let msg = &bincode::serialize(msg).unwrap()[..];
         let chained: &[u8] = &[&[t], msg].concat()[..];
 
-        self.udp_listener.send_to(chained, addr).unwrap();
+        let packet = UdpPacket {
+            data: chained.to_vec(),
+            reliable: false, //FIXME
+            msg_id: self.next_msg_id,
+            upgraded: MsgEncryption::Unencrypted
+        };
+        self.next_msg_id += 1;
+
+        let wrapped_data = &bincode::serialize(&packet).unwrap()[..];
+        self.udp_listener.send_to(wrapped_data, addr).unwrap();
     }
 }

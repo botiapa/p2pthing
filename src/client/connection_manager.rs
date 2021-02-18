@@ -1,15 +1,16 @@
 use mio_misc::{NotificationId, channel::channel, queue::NotificationQueue};
 use msg_types::{Call};
 use mio::{Interest, Poll, Waker, net::{TcpStream, UdpSocket}};
-use std::{net::{ SocketAddr}, str::FromStr, sync::{Arc, mpsc}, thread::{self, JoinHandle}, time::Instant};
+use std::{net::SocketAddr, ops::Add, rc::Rc, str::FromStr, sync::{Arc}, thread::{self, JoinHandle}, time::{Duration, Instant}};
 use mio_misc::channel::Sender;
 
 use mio::Token;
 
-use crate::common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption}, message_type::{InterthreadMessage,  msg_types, Peer}};
+use crate::common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption}, message_type::{InterthreadMessage, MsgEncryption, MsgType, Peer, UdpPacket, msg_types}};
+
+use super::{audio::Audio, udp_connection::{UdpConnection, UdpConnectionState}};
 
 mod event_loop;
-mod waker_thread;
 mod tcp_messages;
 mod udp_messages;
 mod utils;
@@ -19,98 +20,106 @@ const WAKER: Token = Token(1);
 const UDP_SOCKET: Token = Token(2);
 
 /// Call decay defined in seconds
-const CALL_DECAY: u64 = 60; 
+const CALL_DECAY: Duration = Duration::from_secs(10); 
 /// Keep alive delay between messages
-const KEEP_ALIVE_DELAY: u64 = 10; 
+pub const KEEP_ALIVE_DELAY: Duration = Duration::from_secs(10); 
 /// Message sending interval when mid-call
-const KEEP_ALIVE_DELAY_MIDCALL: u64 = 1; 
+pub const KEEP_ALIVE_DELAY_MIDCALL: Duration = Duration::from_secs(1); 
 /// Message sending interval when announcing
-const ANNOUNCE_DELAY: u64 = 1; 
+pub const ANNOUNCE_DELAY: Duration = Duration::from_secs(1); 
 /// Delay between rendezvous server reconnect tries
-const RECONNECT_DELAY: u64 = 5;
+const RECONNECT_DELAY: Duration = Duration::from_secs(5);
+/// Delay between retrying to send a reliable message
+pub const RELIABLE_MESSAGE_DELAY: Duration = Duration::from_secs(2);
 
 pub struct ConnectionManager {
     rendezvous_socket: TcpStream,
     rendezvous_ip: SocketAddr,
     rendezvous_public_key: Option<NetworkedPublicKey>,
-    rendezvous_syn_key: SymmetricEncryption,
-    udp_socket: UdpSocket,
+    udp_socket: Rc<UdpSocket>,
     peers: Vec<Peer>,
     udp_connections: Vec<UdpConnection>,
     poll: Poll,
     ui_s: Sender<InterthreadMessage>,
     cm_s: Sender<InterthreadMessage>,
-    encryption: AsymmetricEncryption,
+    encryption: Rc<AsymmetricEncryption>,
     /// Instant is when the call was sent
-    calls_in_progress: Vec<(Call, Instant)>, 
-    waker_thread: mpsc::Sender<InterthreadMessage>
+    calls_in_progress: Vec<(Call, Instant)>,
+    audio: Audio
 }
 
-struct UdpConnection {
-    associated_peer: Option<NetworkedPublicKey>,
-    address: SocketAddr,
-    last_keep_alive: Option<Instant>,
-    last_announce: Option<Instant>,
-    state: UdpConnectionState
+pub struct UdpHolder {
+    pub packet: UdpPacket,
+    pub last_send: Instant,
+    pub sock: Rc<UdpSocket>,
+    pub address: SocketAddr,
+    pub msg_type: MsgType,
+    /// Custom identifier used when trying to identify a confirmed message
+    pub custom_id: Option<u32>
 }
 
-enum UdpConnectionState {
-    /// The punch through is currently being done
-    MidCall=0, 
-    /// The socket is 'connected' so only keep alive packets need to be sent
-    Connected=1,
-    /// The socket is waiting for the server to accept the announce
-    Unannounced=2
+impl UdpHolder{
+    pub fn resend(&mut self) {
+        let packet_data = &bincode::serialize(&self.packet).unwrap()[..];
+        self.sock.send_to(packet_data, self.address).unwrap();
+        self.last_send = Instant::now();
+    }
 }
 
 impl ConnectionManager {
-    pub fn start(rend_ip: &str, ui_s: Sender<InterthreadMessage>) -> (mio_misc::channel::Sender<InterthreadMessage>, JoinHandle<()>, Arc<Waker>, NetworkedPublicKey) {
-        let mut udp_connections = Vec::new();
-        let poll = Poll::new().unwrap();
-
-        let waker = Arc::new(Waker::new(poll.registry(), WAKER).unwrap());
-        let queue = Arc::new(NotificationQueue::new(waker.clone()));
-        let (cm_s, cm_r) = channel(queue, NotificationId::gen_next());
-        
-        let rend_ip = SocketAddr::from_str(rend_ip).unwrap();
+    pub fn new(encryption:AsymmetricEncryption, rend_ip: String, poll: Poll, ui_s: Sender<InterthreadMessage>, cm_s: Sender<InterthreadMessage>) -> ConnectionManager {
+        let rend_ip = SocketAddr::from_str(&rend_ip).unwrap();
 
         let mut rendezvous_socket = TcpStream::connect(rend_ip).unwrap();
         poll.registry().register(&mut rendezvous_socket, RENDEZVOUS, Interest::READABLE).unwrap();
 
         let mut udp_socket = UdpSocket::bind(SocketAddr::from_str("0.0.0.0:0").unwrap()).unwrap();
-        udp_connections.push(UdpConnection{
-            associated_peer: None,
-            address: rend_ip,
-            last_keep_alive: None,
-            last_announce: None,
-            state: UdpConnectionState::Unannounced,
-        });
         poll.registry().register(&mut udp_socket, UDP_SOCKET, Interest::READABLE).unwrap();
+        let mut udp_connections = Vec::new();
 
-        let waker_thread = ConnectionManager::set_up_waker_thread(waker.clone());
-        waker_thread.send(InterthreadMessage::SetWakepDelay(ANNOUNCE_DELAY)).unwrap();
+        let audio = Audio::new(ui_s.clone(), cm_s.clone());
 
-        let encryption = AsymmetricEncryption::new();
-        let key = encryption.get_public_key();
+        let udp_socket = Rc::new(udp_socket);
+        let encryption = Rc::new(encryption);
+        udp_connections.push(UdpConnection::new(
+            UdpConnectionState::Unannounced, 
+            rend_ip, 
+            udp_socket.clone(), 
+            Some(SymmetricEncryption::new()),
+            encryption.clone()
+        ));
 
-        let mut mgr = ConnectionManager {
+        ConnectionManager {
             rendezvous_socket,
             rendezvous_ip: rend_ip,
             rendezvous_public_key: None,
-            rendezvous_syn_key: SymmetricEncryption::new(),
-            udp_socket,
+            udp_socket: udp_socket.clone(),
             peers: Vec::new(),
             udp_connections,
             poll,
+            audio,
             ui_s,
             cm_s: cm_s.clone(),
             encryption,
             calls_in_progress: Vec::new(),
-            waker_thread,
-        };
+        }
+    }
+
+    pub fn start(rend_ip: String, ui_s: Sender<InterthreadMessage>) -> (mio_misc::channel::Sender<InterthreadMessage>, JoinHandle<()>, Arc<Waker>, NetworkedPublicKey) {
+        let poll = Poll::new().unwrap();
+        let waker = Arc::new(Waker::new(poll.registry(), WAKER).unwrap());
+        let queue = Arc::new(NotificationQueue::new(waker.clone()));
+        let (cm_s, mut cm_r) = channel(queue, NotificationId::gen_next());
+
+        let encryption = AsymmetricEncryption::new();
+        let key = encryption.get_public_key();
+
+        let cm_s1 = cm_s.clone();
         let thr = thread::spawn(move || {
-            mgr.event_loop(cm_r);
+            let mut mgr = ConnectionManager::new(encryption, rend_ip, poll, ui_s, cm_s1);
+            mgr.event_loop(&mut cm_r);
         });
+        
         (cm_s, thr, waker, key)
     }
 
@@ -118,11 +127,11 @@ impl ConnectionManager {
         s.send(InterthreadMessage::Call(public_key)).unwrap();
     }
 
-    pub fn send_chat_message(s: &Sender<InterthreadMessage>, public_key: NetworkedPublicKey, msg: String) {
-        s.send(InterthreadMessage::SendChatMessage(public_key, msg)).unwrap();
+    pub fn send_chat_message(s: &Sender<InterthreadMessage>, public_key: NetworkedPublicKey, msg: String, custom_id: u32) {
+        s.send(InterthreadMessage::SendChatMessage(public_key, msg, custom_id)).unwrap();
     }
 
-    pub fn quit(s: &Sender<InterthreadMessage>, waker: &Waker) {
-        s.send(InterthreadMessage::Quit());
+    pub fn quit(s: &Sender<InterthreadMessage>) {
+        s.send(InterthreadMessage::Quit()).unwrap();
     }
 }

@@ -2,7 +2,7 @@ use std::io::{self, Read};
 
 use mio::{Events, Interest, Token};
 
-use crate::common::{message_type::{MsgType, msg_types::{AnnouncePublic, AnnounceRequest}}};
+use crate::common::{message_type::{MsgType, msg_types::AnnounceRequest}};
 
 use super::RendezvousServer;
 

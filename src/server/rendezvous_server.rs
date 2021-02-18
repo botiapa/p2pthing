@@ -28,7 +28,8 @@ pub struct RendezvousServer {
     peers: Vec<Peer>,
     /// List of ongoing calls
     calls: Vec<CallRequest>,
-    encryption: AsymmetricEncryption
+    encryption: AsymmetricEncryption,
+    next_msg_id: u32
 }
 
 impl RendezvousServer {
@@ -57,6 +58,7 @@ impl RendezvousServer {
             peers: Vec::new(),
             calls: Vec::new(),
             encryption,
+            next_msg_id: 0,
         };
         s.event_loop();
     }

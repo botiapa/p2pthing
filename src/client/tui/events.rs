@@ -1,27 +1,28 @@
 use core::panic;
-use std::{sync::{atomic::Ordering, mpsc::TryRecvError}, thread};
+use std::{any::Any, ops::Deref, sync::{atomic::Ordering, mpsc::TryRecvError}, thread};
 
-use ActiveBlock::{ChatInput, ChatMessages, Tabs};
 use chrono::Utc;
+use cpal::traits::DeviceTrait;
 use crossterm::event::{Event, KeyCode, KeyModifiers, read};
+use num::FromPrimitive;
 
-use super::{ActiveBlock::{self, ContactList}, CallStatus, CallStatusHolder, DebugMessageType, Tui, ui_peer::{ChatMessage, UIPeer}};
+use super::{ActiveBlock, CHOOSABLE_KBITS, CallStatus, CallStatusHolder, DebugMessageType, TabIndex, Tui, ui_peer::{ChatMessage, UIPeer}};
 use super::super::connection_manager::ConnectionManager;
-use crate::common::message_type::{InterthreadMessage::*, MsgType, Peer};
+use crate::common::message_type::{*, self, Peer};
 
 impl Tui {
 
     pub fn handle_interthread_events(&mut self) {
         for msg in self.ui_r.try_iter() {
             match msg {
-                AnnounceResponse(msg) => {
+                InterthreadMessage::AnnounceResponse(msg) => {
                     self.peers = msg.iter().map(UIPeer::from).collect();
                     match self.contact_list_state.selected() {
                         None if self.peers.len() > 0 => self.contact_list_state.select(Some(0)),
                         _ => {}
                     }
                 }
-                PeerDisconnected(p_key) => {
+                InterthreadMessage::PeerDisconnected(p_key) => {
                     let pos = self.peers.iter().position(|x| *x.get_public_key() == p_key).unwrap();
                     self.peers.remove(pos);
                     match self.contact_list_state.selected() {
@@ -30,11 +31,11 @@ impl Tui {
                         None | Some(_) => {}
                     }
                     match self.active_block {
-                        ChatInput | ChatMessages => self.active_block = ContactList,
+                        ActiveBlock::ChatInput | ActiveBlock::ChatMessages => self.active_block = ActiveBlock::ContactList,
                         _ => {}
                     }
                 },
-                Call(public_key) | CallAccepted(public_key) => {
+                InterthreadMessage::Call(public_key) | InterthreadMessage::CallAccepted(public_key) => {
                     match self.calls.iter_mut().find(|c| c.public_key == public_key) {
                         Some(call) => call.status = CallStatus::PunchThroughInProgress,
                         None => self.calls.push(CallStatusHolder{
@@ -43,33 +44,55 @@ impl Tui {
                         })
                     }
                 },
-                CallDenied(public_key) => {
+                InterthreadMessage::CallDenied(public_key) => {
                     match self.calls.iter_mut().find(|c| c.public_key == public_key) {
                         Some(call) => call.status = CallStatus::RequestFailed,
                         None => unreachable!()
                     }
                 },
-                PunchThroughSuccessfull(public_key) => {
+                InterthreadMessage::PunchThroughSuccessfull(public_key) => {
                     match self.calls.iter_mut().find(|c| c.public_key == public_key) {
                         Some(call) => call.status = CallStatus::PunchThroughSuccessfull,
                         None => unreachable!()
                     }
                 }
                 // FIXME: Duplicated code
-                DebugMessage(msg, msg_type) => {
+                InterthreadMessage::DebugMessage(msg, msg_type) => {
                     self.debug_messages.push(super::DebugMessage {
                         message: msg,
                         time: Utc::now(),
                         msg_type,
                     });
+                    self.debug_messages_state.select(Some(self.debug_messages.len() - 1));
                 },
-                OnChatMessage(p, msg) => {
+                InterthreadMessage::OnChatMessage(p, msg) => {
                     let ui_peer = self.peers.iter_mut().find(|peer| peer.get_public_key() == &p.public_key).unwrap();
                     ui_peer.chat_messages.push(ChatMessage {
                         author: p,
-                        msg
+                        msg,
+                        custom_id: None,
+                        received: None,
+                        own: false
                     });
-                }
+                },
+                InterthreadMessage::OnChatMessageReceived(custom_id) => {
+                    for p in &mut self.peers {
+                        for msg in &mut p.chat_messages {
+                            if msg.own && msg.custom_id.unwrap() == custom_id {
+                                msg.received = Some(true);
+                                break;
+                            }
+                        }
+                    }
+                },
+                InterthreadMessage::AudioNewInputDevices(devices) => {
+                    self.settings_inputs = devices;
+                    self.settings_inputs_state.select(None); //FIXME
+                },
+                InterthreadMessage::AudioNewOutputDevices(devices) => {
+                    self.settings_outputs = devices;
+                    self.settings_outputs_state.select(None); //FIXME
+                },
                 _ => unreachable!()
             }
         }
@@ -97,16 +120,20 @@ impl Tui {
         let i = self.contact_list_state.selected().unwrap();
         let peer = self.peers.get_mut(i).unwrap();
         if !peer.chat_input.get_string().is_empty() {
-            ConnectionManager::send_chat_message(&self.cm_s.as_mut().unwrap(), peer.get_public_key().clone(), peer.chat_input.get_string());
+            ConnectionManager::send_chat_message(&self.cm_s.as_mut().unwrap(), peer.get_public_key().clone(), peer.chat_input.get_string(), self.next_msg_id);
             peer.chat_messages.push(ChatMessage {
                 author: Peer {
                     addr: None,
                     udp_addr: None,
                     sym_key: None,
                     public_key: self.own_public_key.clone().unwrap(),
-                }, //FIXME
+                },
                 msg: peer.chat_input.get_string(),
+                custom_id: Some(self.next_msg_id),
+                received: Some(false),
+                own: true
             });
+            self.next_msg_id += 1;
             peer.chat_input.clear();
         }
     }
@@ -117,11 +144,14 @@ impl Tui {
                 Ok(e) => {
                     match e {
                         Ok(e) => {
-                            match self.active_block {
-                                ContactList => self.handle_contact_list_event(e),
-                                ChatMessages => self.handle_chat_messages_event(e),
-                                ChatInput => self.handle_chat_input_event(e),
-                                Tabs => self.handle_tabs_input_event(e)
+                            match &self.active_block {
+                                ActiveBlock::ContactList => self.handle_contact_list_event(e),
+                                ActiveBlock::ChatMessages => self.handle_chat_messages_event(e),
+                                ActiveBlock::ChatInput => self.handle_chat_input_event(e),
+                                ActiveBlock::InputList => self.handle_input_list_event(e),
+                                ActiveBlock::OutputList => self.handle_output_list_event(e),
+                                ActiveBlock::BitRateList => self.handle_bitrate_list_event(e),
+                                ActiveBlock::Tabs => self.handle_tabs_input_event(e)
                             }
                             self.handle_global_event(e);
                         }
@@ -151,13 +181,25 @@ impl Tui {
                     }
                     KeyCode::Tab => {
                         if self.selected_tab == self.tab_titles.len() - 1 {self.selected_tab = 0} else {self.selected_tab += 1;}
+                        self.active_block = ActiveBlock::Tabs;
+                        self.is_active = false;
                     }
                     KeyCode::BackTab => {
                         if self.selected_tab == 0 {self.selected_tab = self.tab_titles.len() - 1} else {self.selected_tab -= 1;}
+                        self.active_block = ActiveBlock::Tabs;
+                        self.is_active = false;
+                    }
+                    KeyCode::Char('m') => {
+                        self.muted = !self.muted;
+                        self.cm_s.as_ref().unwrap().send(InterthreadMessage::AudioChangeMuteState(self.muted)).unwrap();
                     }
                     KeyCode::F(x) => {
                         match x {
-                            x if (x as usize) < self.tab_titles.len() + 1 => self.selected_tab = (x - 1).into(),
+                            x if (x as usize) < self.tab_titles.len() + 1 => {
+                                self.selected_tab = (x - 1).into();
+                                self.active_block = ActiveBlock::Tabs;
+                                self.is_active = false;
+                            },
                             _ => {}
                         }
                     }
@@ -165,6 +207,144 @@ impl Tui {
                 }
                 if e.code == KeyCode::Char('q') || (e.code == KeyCode::Char('c') && e.modifiers == KeyModifiers::CONTROL) {
                     self.running.store(false, Ordering::SeqCst);
+                }
+            }
+            Event::Mouse(_) => {}
+            Event::Resize(_, _) => {}
+        }
+    }
+
+    fn handle_input_list_event(&mut self, e: Event) {
+        match e {
+            Event::Key(e) => {
+                match e.code {
+                    KeyCode::Up if self.is_active => {
+                        match &self.settings_inputs{
+                            Some(inputs) => {
+                                match self.settings_inputs_state.selected() {
+                                    Some(i) if i > 0 => self.settings_inputs_state.select(Some(i - 1)),
+                                    _ => self.chat_messages_list_state = Some(inputs.len() - 1),
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    KeyCode::Down if self.is_active => {
+                        match &self.settings_inputs{
+                            Some(inputs) => {
+                                match self.settings_inputs_state.selected() {
+                                    Some(i) if i < inputs.len() - 1 => self.settings_inputs_state.select(Some(i + 1)),
+                                    _ => self.settings_inputs_state.select(Some(0)),
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    KeyCode::Enter if self.is_active => {
+                        match &self.settings_inputs {
+                            Some(inputs) => {
+                                match self.settings_inputs_state.selected() {
+                                    Some(selected) => {
+                                        let d = inputs.get(selected).unwrap();
+                                        self.cm_s.as_ref().unwrap().send(InterthreadMessage::AudioChangeInputDevice(d.clone())).unwrap();
+                                    }
+                                    None => {}
+                                }
+                            }
+                            _ => {}
+                        }
+                    },
+                    KeyCode::Up => self.active_block = ActiveBlock::Tabs,
+                    KeyCode::Right if !self.is_active => self.active_block = ActiveBlock::OutputList,
+                    KeyCode::Left if !self.is_active => self.active_block = ActiveBlock::BitRateList,
+                    _ => {}
+                }
+            }
+            Event::Mouse(_) => {}
+            Event::Resize(_, _) => {}
+        }
+    }
+
+    fn handle_output_list_event(&mut self, e: Event) {
+        match e {
+            Event::Key(e) => {
+                match e.code {
+                    KeyCode::Up if self.is_active => {
+                        match &self.settings_inputs{
+                            Some(inputs) => {
+                                match self.settings_outputs_state.selected() {
+                                    Some(i) if i > 0 => self.settings_outputs_state.select(Some(i - 1)),
+                                    _ => self.chat_messages_list_state = Some(inputs.len() - 1),
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    KeyCode::Down if self.is_active => {
+                        match &self.settings_outputs{
+                            Some(outputs) => {
+                                match self.settings_outputs_state.selected() {
+                                    Some(i) if i < outputs.len() - 1 => self.settings_outputs_state.select(Some(i + 1)),
+                                    _ => self.settings_outputs_state.select(Some(0)),
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    KeyCode::Enter if self.is_active => {
+                        match &self.settings_outputs {
+                            Some(outputs) => {
+                                match self.settings_outputs_state.selected() {
+                                    Some(selected) => {
+                                        let d = outputs.get(selected).unwrap();
+                                        self.cm_s.as_ref().unwrap().send(InterthreadMessage::AudioChangeOutputDevice(d.clone())).unwrap();
+                                    }
+                                    None => {}
+                                }
+                            }
+                            _ => {}
+                        }
+                    },
+                    KeyCode::Up => self.active_block = ActiveBlock::Tabs,
+                    KeyCode::Left if !self.is_active => self.active_block = ActiveBlock::InputList,
+                    KeyCode::Right if !self.is_active => self.active_block = ActiveBlock::BitRateList,
+                    _ => {}
+                }
+            }
+            Event::Mouse(_) => {}
+            Event::Resize(_, _) => {}
+        }
+    }
+
+    fn handle_bitrate_list_event(&mut self, e: Event) {
+        match e {
+            Event::Key(e) => {
+                match e.code {
+                    KeyCode::Up if self.is_active => {
+                        match self.settings_kbits_state.selected() {
+                            Some(i) if i > 0 => self.settings_kbits_state.select(Some(i - 1)),
+                            _ => self.settings_kbits_state.select(Some(CHOOSABLE_KBITS.len() - 1)),
+                        }
+                    }
+                    KeyCode::Down if self.is_active => {
+                        match self.settings_kbits_state.selected() {
+                            Some(i) if i < CHOOSABLE_KBITS.len() - 1 => self.settings_kbits_state.select(Some(i + 1)),
+                            _ => self.settings_kbits_state.select(Some(0)),
+                        }
+                    }
+                    KeyCode::Enter if self.is_active => {
+                        match self.settings_kbits_state.selected() {
+                            Some(selected) => {
+                                let n = CHOOSABLE_KBITS[selected];
+                                self.cm_s.as_ref().unwrap().send(InterthreadMessage::AudioChangePreferredKbits(n)).unwrap();
+                            }
+                            None => {}
+                        }
+                    },
+                    KeyCode::Up => self.active_block = ActiveBlock::Tabs,
+                    KeyCode::Left if !self.is_active => self.active_block = ActiveBlock::OutputList,
+                    KeyCode::Right if !self.is_active => self.active_block = ActiveBlock::InputList,
+                    _ => {}
                 }
             }
             Event::Mouse(_) => {}
@@ -218,8 +398,8 @@ impl Tui {
                             }
                         }
                     }
-                    KeyCode::Up => self.active_block = Tabs,
-                    KeyCode::Right if !self.is_active && self.contact_list_state.selected().is_some() => self.active_block = ChatMessages,
+                    KeyCode::Up => self.active_block = ActiveBlock::Tabs,
+                    KeyCode::Right if !self.is_active && self.contact_list_state.selected().is_some() => self.active_block = ActiveBlock::ChatMessages,
                     _ => {}
                 }
             }
@@ -229,18 +409,29 @@ impl Tui {
     }
 
     fn handle_chat_messages_event(&mut self, e: Event) {
+        if !self.is_active {
+            self.chat_messages_list_state = None
+        }
         match e {
             Event::Key(e) => {
                 match e.code {
                     KeyCode::Up if self.is_active => {
-                        // TODO: Scroll
+                        match self.chat_messages_list_state {
+                            Some(i) if i > 0 => self.chat_messages_list_state = Some(i-1),
+                            None if self.chat_messages_length > 1 => self.chat_messages_list_state = Some(self.chat_messages_length - 2),
+                            _ => {}
+                        }
                     }
                     KeyCode::Down if self.is_active => {
-                        // TODO: Scroll
+                        match self.chat_messages_list_state {
+                            Some(i) if i == self.chat_messages_length - 1 => self.chat_messages_list_state = None,
+                            Some(i) if i < self.chat_messages_length - 1 => self.chat_messages_list_state = Some(i+1),
+                            _ => {}
+                        }
                     }
-                    KeyCode::Up => self.active_block = Tabs,
-                    KeyCode::Left if !self.is_active => self.active_block = ContactList,
-                    KeyCode::Down if !self.is_active => self.active_block = ChatInput,
+                    KeyCode::Up => self.active_block = ActiveBlock::Tabs,
+                    KeyCode::Left if !self.is_active => self.active_block = ActiveBlock::ContactList,
+                    KeyCode::Down if !self.is_active => self.active_block = ActiveBlock::ChatInput,
                     _ => {}
                 }
             }
@@ -260,8 +451,8 @@ impl Tui {
                     KeyCode::Left if self.is_active => input.deadvance_cursor(),
                     KeyCode::Right if self.is_active => input.advance_cursor(),
                     KeyCode::Enter if self.is_active => self.send_chat_message(),
-                    KeyCode::Left if !self.is_active => self.active_block = ContactList,
-                    KeyCode::Up if !self.is_active => self.active_block = ChatMessages,
+                    KeyCode::Left if !self.is_active => self.active_block = ActiveBlock::ContactList,
+                    KeyCode::Up if !self.is_active => self.active_block = ActiveBlock::ChatMessages,
                     _ => {}
                 }
             }
@@ -285,11 +476,17 @@ impl Tui {
                     }
                     KeyCode::Right if self.is_active => {
                         if self.selected_tab == self.tab_titles.len() - 1 {self.selected_tab = 0} else {self.selected_tab += 1;}
+                        self.active_block = ActiveBlock::Tabs;
                     }
                     KeyCode::Left if self.is_active => {
                         if self.selected_tab == 0 {self.selected_tab = self.tab_titles.len() - 1} else {self.selected_tab -= 1;}
+                        self.active_block = ActiveBlock::Tabs;
                     }
-                    KeyCode::Down if !self.is_active => self.active_block = ContactList,
+                    KeyCode::Down if !self.is_active => match FromPrimitive::from_usize(self.selected_tab) {
+                        Some(TabIndex::MAIN) => self.active_block = ActiveBlock::ContactList,
+                        Some(TabIndex::SETTINGS) => self.active_block = ActiveBlock::InputList,
+                        _ => {}
+                    }
                     _ => {}
                 }
             }

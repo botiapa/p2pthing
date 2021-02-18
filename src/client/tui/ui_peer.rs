@@ -4,7 +4,10 @@ use super::chat_input::ChatInput;
 
 pub struct ChatMessage {
     pub author: Peer,
-    pub msg: String
+    pub msg: String,
+    pub custom_id: Option<u32>,
+    pub received: Option<bool>,
+    pub own: bool
 }
 
 pub struct UIPeer {

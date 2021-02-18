@@ -1,5 +1,4 @@
-use core::panic;
-use std::{io::{self, Write}, net::SocketAddr};
+use std::{cell::RefMut, io::{self, Write}, net::SocketAddr, rc::Rc};
 
 use mio::net::UdpSocket;
 use serde::Serialize;
@@ -13,7 +12,10 @@ impl ConnectionManager {
         let t: u8 = num::ToPrimitive::to_u8(&t).unwrap();
         let msg = &bincode::serialize(msg).unwrap()[..];
 
-        let encrypted = &self.rendezvous_syn_key.encrypt(&[&[t], msg].concat()[..]);
+        let conn = self.udp_connections.iter()
+        .find(|x| x.address == self.rendezvous_ip).unwrap();
+
+        let encrypted = &conn.symmetric_key.as_ref().unwrap().encrypt(&[&[t], msg].concat()[..])[..];
 
         let msg_size = bincode::serialize(&encrypted.len()).unwrap();
         let chained: &[u8] = &[&msg_size[..], encrypted].concat()[..];
@@ -36,31 +38,34 @@ impl ConnectionManager {
         Ok(())
     }
 
-    pub fn send_udp_message<T: ?Sized>(&self, public_key: Option<NetworkedPublicKey>, t: MsgType, msg: &T) -> io::Result<()> where T: Serialize  {
-        let addr = match public_key {
-            Some(public_key) => match self.udp_connections.iter().find(|&c| if let Some(p) = c.associated_peer.as_ref() {*p == public_key} else {false}) {
-                Some(c) => c.address,
-                None => {
-                    Tui::debug_message(&format!("Tried sending chat message to ({}) with no udp address associated", public_key), DebugMessageType::Warning, &self.ui_s);
-                    return Ok(()) // FIXME: Introduce error?
-                }
-            },
-            None => self.rendezvous_ip
-        };
-        let t: u8 = num::ToPrimitive::to_u8(&t).unwrap();
-        let msg = &bincode::serialize(msg).unwrap()[..];
-        let chained: &[u8] = &[&[t], msg].concat()[..];
-
-        self.udp_socket.send_to(chained, addr)?;
-        Ok(())
-    }
-
-    pub fn send_udp_message_to<T: ?Sized>(sock: &UdpSocket, addr: SocketAddr, t: MsgType, msg: &T) -> io::Result<()> where T: Serialize  {
+    pub fn send_udp_message_to<T: ?Sized>(sock: Rc<UdpSocket>, addr: SocketAddr, t: MsgType, msg: &T) -> io::Result<()> where T: Serialize  {
         let t: u8 = num::ToPrimitive::to_u8(&t).unwrap();
         let msg = &bincode::serialize(msg).unwrap()[..];
         let chained: &[u8] = &[&[t], msg].concat()[..];
 
         sock.send_to(chained, addr)?;
+        Ok(())
+    }
+
+    /// Send a UDP packet which optionally can be reliable
+    pub fn send_udp_message<T: ?Sized>(&mut self, public_key: Option<NetworkedPublicKey>, t: MsgType, msg: &T, reliable: bool, custom_id: Option<u32>) -> Result<(), &'static str> where T: Serialize  {
+        let rendezvous_ip = self.rendezvous_ip.clone();
+        let conn = match public_key {
+            Some(public_key) => {
+                match self.udp_connections.iter_mut()
+                .find(|c| 
+                    if c.associated_peer.is_some() {c.associated_peer.as_ref().unwrap() == &public_key} else {false}
+                ) {
+                    Some(conn) => conn,
+                    None => {
+                        Tui::debug_message(&format!("Cannot find udp connection with public key: ({})", public_key), DebugMessageType::Error, &self.ui_s);
+                        return Err("Cannot find udp connection");
+                    }
+                }
+            }
+            None => self.udp_connections.iter_mut().find(|c| c.address == rendezvous_ip).unwrap()
+        };
+        conn.send_udp_message(t, msg, reliable, custom_id);
         Ok(())
     }
 }

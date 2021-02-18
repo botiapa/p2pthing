@@ -1,14 +1,14 @@
 use std::net::SocketAddr;
 
-use msg_types::{AnnounceRequest, CallResponse, Disconnect};
+use msg_types::{AnnounceRequest, AnnounceSecret, CallResponse, Disconnect};
 use mio::Token;
 
-use crate::{client::tui::Tui, common::{debug_message::DebugMessageType, lib::read_exact, message_type::{InterthreadMessage, MsgType, msg_types::{self, Call}, Peer}}};
+use crate::{client::tui::Tui, common::{debug_message::DebugMessageType, encryption::SymmetricEncryption, lib::read_exact, message_type::{InterthreadMessage, MsgType, msg_types::{self, Call}, Peer}}};
 
 use super::{ConnectionManager, KEEP_ALIVE_DELAY_MIDCALL, UdpConnection, UdpConnectionState};
 
 impl ConnectionManager {
-    pub fn read_tcp_message(&mut self, msg_type: u8, token: Token) {
+    pub fn read_tcp_message(&mut self, msg_type: u8, _: Token) {
         let sock = &mut self.rendezvous_socket;
         let addr = sock.peer_addr().unwrap();
 
@@ -47,9 +47,12 @@ impl ConnectionManager {
     }
 
     fn on_announce_request(&mut self, addr: SocketAddr, announcement: AnnounceRequest) {
+        let conn = self.udp_connections.iter()
+        .find(|x| x.address == addr).unwrap();
+
         self.rendezvous_public_key = Some(announcement.public_key);
         let announce_secret = msg_types::AnnounceSecret {
-            secret: self.rendezvous_syn_key.secret.clone()
+            secret: conn.symmetric_key.as_ref().unwrap().secret.clone()
         };
         self.send_tcp_message_public_key(MsgType::AnnounceSecret, &announce_secret).unwrap();
         
@@ -59,7 +62,7 @@ impl ConnectionManager {
         self.send_tcp_message(MsgType::Announce, &announce_public).unwrap();
     }
 
-    fn on_tcp_announce(&mut self, addr: SocketAddr, peers: Vec<Peer>) {
+    fn on_tcp_announce(&mut self, _: SocketAddr, peers: Vec<Peer>) {
         for new_p in peers {
             if !self.peers.iter().any(|p| p.public_key == new_p.public_key) {
                 self.peers.push(new_p);
@@ -69,7 +72,7 @@ impl ConnectionManager {
     }
 
     /// Handle incoming call
-    fn on_call(&mut self, addr: SocketAddr, call: Call) {
+    fn on_call(&mut self, _: SocketAddr, call: Call) {
         let caller = call.clone().caller.unwrap();
         let udp_address = caller.udp_addr.unwrap();
 
@@ -88,24 +91,18 @@ impl ConnectionManager {
         let p = self.peers.iter_mut().find(|p| p.public_key == caller.public_key).unwrap();
         p.udp_addr = Some(udp_address);
 
-        let conn = UdpConnection {
-            associated_peer: Some(p.public_key.clone()),
-            address: udp_address,
-            last_keep_alive: None,
-            last_announce: None,
-            state: UdpConnectionState::MidCall,
-        };
+        let mut conn = UdpConnection::new(UdpConnectionState::MidCall, udp_address, self.udp_socket.clone(), None, self.encryption.clone());
+        conn.associated_peer = Some(caller.public_key.clone());
         Tui::debug_message(
             &format!("Accepted call from peer ({};{}), starting the punch through protocol", 
                 caller.public_key, conn.address), 
         DebugMessageType::Log, &self.ui_s);
 
         self.udp_connections.push(conn);
-        self.waker_thread.send(InterthreadMessage::SetWakepDelay(KEEP_ALIVE_DELAY_MIDCALL)).unwrap();
     }
 
     /// Handle the response to a sent call
-    fn on_call_response(&mut self, addr: SocketAddr, call_response: CallResponse) {
+    fn on_call_response<'a>(&mut self, _: SocketAddr, call_response: CallResponse) {
         let call = call_response.call;
         if !call_response.response {
             let i = self.calls_in_progress.iter()
@@ -125,24 +122,22 @@ impl ConnectionManager {
             .unwrap();
             self.calls_in_progress.remove(i);
     
-            let conn = UdpConnection {
-                associated_peer: Some(p.public_key.clone()),
-                address: udp_address,
-                last_keep_alive: None,
-                last_announce: None,
-                state: UdpConnectionState::MidCall,
-            };
+            let sym_key = SymmetricEncryption::new();
+            let mut conn = UdpConnection::new(UdpConnectionState::MidCall, udp_address, self.udp_socket.clone(), Some(sym_key), self.encryption.clone());
+            conn.associated_peer = Some(call.callee.public_key.clone());
             Tui::debug_message(
-                &format!("A sent call has been accepted by peer ({};{}), starting the punch through protocol", 
-                call.callee.public_key, conn.address),
-            DebugMessageType::Log, &self.ui_s);
+            &format!("A sent call has been accepted by peer ({};{}), starting the punch through protocol",
+            call.callee.public_key, conn.address),
+        DebugMessageType::Log, &self.ui_s);
+
+            conn.send_udp_message_with_public_key(MsgType::AnnounceSecret, &AnnounceSecret{secret: conn.symmetric_key.as_ref().unwrap().secret.clone()}, true, None).unwrap();
+
             self.ui_s.send(InterthreadMessage::CallAccepted(p.public_key.clone())).unwrap();
             self.udp_connections.push(conn);
-            self.waker_thread.send(InterthreadMessage::SetWakepDelay(KEEP_ALIVE_DELAY_MIDCALL)).unwrap();
         }
     }
 
-    fn on_disconnect(&mut self, addr: SocketAddr, disconnect_peer: Disconnect) {
+    fn on_disconnect(&mut self, _: SocketAddr, disconnect_peer: Disconnect) {
         let p = self.peers.iter_mut().find(|p| p.public_key == disconnect_peer.public_key).unwrap();
         Tui::debug_message(&format!("Peer ({}) disconnected", p.public_key),DebugMessageType::Log, &self.ui_s);
         match p.udp_addr {

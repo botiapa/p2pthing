@@ -1,11 +1,13 @@
 use std::net::SocketAddr;
+use cpal::Device;
 use num_derive::{FromPrimitive, ToPrimitive};
 use serde::{Serialize, Deserialize};
 
 use super::{debug_message::DebugMessageType, encryption::{NetworkedPublicKey, SymmetricEncryption}};
 pub enum InterthreadMessage {
-    SendChatMessage(NetworkedPublicKey, String),
+    SendChatMessage(NetworkedPublicKey, String, u32),
     OnChatMessage(Peer, String),
+    OnChatMessageReceived(u32), //u32 is the custom_id
     AnnounceResponse(Vec<Peer>),
     CallAccepted(NetworkedPublicKey),
     CallDenied(NetworkedPublicKey),
@@ -13,9 +15,15 @@ pub enum InterthreadMessage {
     Quit(),
     PeerDisconnected(NetworkedPublicKey),
     Call(NetworkedPublicKey),
-    SetWakepDelay(u64),
+    OpusPacketReady(Vec<u8>),
     DebugMessage(String, DebugMessageType),
     ConnectToServer(),
+    AudioChangeInputDevice(String),
+    AudioChangeOutputDevice(String),
+    AudioNewInputDevices(Option<Vec<String>>),
+    AudioNewOutputDevices(Option<Vec<String>>),
+    AudioChangePreferredKbits(i32),
+    AudioChangeMuteState(bool),
     WakeUp,
 }
 
@@ -29,8 +37,11 @@ pub enum MsgType {
     KeepAlive=4,
     ChatMessage=5,
     ChatMessageReceived=6,
-    AnnounceRequest=7
+    AnnounceRequest=7,
+    MessageConfirmation=9,
+    OpusPacket=10
 }
+
 #[derive(Serialize, Deserialize)]
 pub struct Peer {
     pub addr: Option<SocketAddr>,
@@ -73,6 +84,20 @@ impl PartialEq for Peer {
     fn eq(&self, other: &Self) -> bool {
         self.public_key == other.public_key
     }
+}
+#[derive(Serialize, Deserialize, Clone)]
+pub enum MsgEncryption {
+    Unencrypted,
+    PublicKey,
+    SymmetricKey
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct UdpPacket {
+    pub data: Vec<u8>,
+    pub reliable: bool,
+    pub msg_id: u32,
+    pub upgraded: MsgEncryption
 }
 
 pub mod msg_types {
@@ -123,5 +148,10 @@ pub mod msg_types {
     #[derive(Serialize, Deserialize)]
     pub struct Disconnect {
         pub public_key: NetworkedPublicKey
+    }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct ReliableMessageReceived {
+        pub id: u32
     }
 }

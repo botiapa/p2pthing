@@ -1,13 +1,14 @@
-use std::{collections::HashMap, io::{stdout}, panic, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}, mpsc::Receiver}};
-use std::io::Write;
+use std::{io::{stdout}, panic, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}, mpsc::Receiver}};
 
-use chat_input::ChatInput;
-use crossterm::{ErrorKind, QueueableCommand, event::{EnableMouseCapture, Event}, execute, terminal::{EnterAlternateScreen, LeaveAlternateScreen, enable_raw_mode}};
+use cpal::Device;
+use crossterm::{ErrorKind, QueueableCommand, event::{DisableMouseCapture, EnableMouseCapture, Event}, execute, terminal::{EnterAlternateScreen, LeaveAlternateScreen, enable_raw_mode}};
 use mio::{Events, Poll, Token, Waker};
 use mio_misc::{NotificationId, channel::{Sender, channel}, queue::NotificationQueue};
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 use tui::{Terminal, backend::{CrosstermBackend}, widgets::ListState};
 
-use crate::common::{debug_message::{self, DebugMessage, DebugMessageType}, encryption::NetworkedPublicKey, message_type::{InterthreadMessage, Peer}};
+use crate::common::{debug_message::{DebugMessage, DebugMessageType}, encryption::NetworkedPublicKey, message_type::{InterthreadMessage, Peer}};
 
 use self::ui_peer::UIPeer;
 
@@ -21,7 +22,10 @@ enum ActiveBlock {
     ContactList,
     ChatMessages,
     ChatInput,
-    Tabs
+    Tabs,
+    InputList,
+    OutputList,
+    BitRateList
 }
 
 enum CallStatus {
@@ -49,17 +53,31 @@ pub struct Tui {
     running: Arc<AtomicBool>,
     debug_messages: Vec<DebugMessage>,
     debug_messages_state: ListState,
+    chat_messages_length: usize,
+    chat_messages_list_state: Option<usize>,
+    settings_inputs: Option<Vec<String>>,
+    settings_inputs_state: ListState,
+    settings_outputs: Option<Vec<String>>,
+    settings_outputs_state: ListState,
+    settings_kbits_state: ListState,
+    muted: bool,
     selected_tab: usize,
     tab_titles: Vec<String>,
     active_block: ActiveBlock,
     is_active: bool,
     own_public_key: Option<NetworkedPublicKey>,
-    calls: Vec<CallStatusHolder>
+    calls: Vec<CallStatusHolder>,
+    next_msg_id: u32
 }
 
-// Tabs
-const MAIN: usize = 0;
-const DEBUG: usize = 1;
+#[derive(FromPrimitive)]
+enum TabIndex {
+    MAIN = 0,
+    SETTINGS = 1,
+    DEBUG = 2,
+}
+
+const CHOOSABLE_KBITS: [i32; 7] = [2, 8, 16, 32, 64, 128, 256];
 
 impl Tui {
     pub fn new() -> Tui {
@@ -85,12 +103,22 @@ impl Tui {
             running: Arc::new(AtomicBool::new(true)),
             debug_messages: vec![],
             debug_messages_state: ListState::default(),
+            chat_messages_list_state: None,
+            chat_messages_length: 0,
+            settings_inputs: None,
+            settings_inputs_state: ListState::default(),
+            settings_outputs: None,
+            settings_outputs_state: ListState::default(),
+            settings_kbits_state: ListState::default(),
+            muted: true,
             selected_tab: 0,
-            tab_titles: vec!["Main".into(), "Debug".into()],
+            tab_titles: vec!["Main".into(), "Settings".into(), "Debug".into()],
             active_block: ActiveBlock::ContactList,
             is_active: false,
             own_public_key: None,
-            calls: vec![]
+            calls: vec![],
+            next_msg_id: 0,
+            
         }
     }
 
@@ -162,10 +190,12 @@ impl Tui {
                 let screen = f.size();
 
                 let tab_divider = self.tab_divider(screen);
-                self.tabs(f, tab_divider[0]);
+                let tab_layout = self.tab_layout(tab_divider[0]);
+                self.tabs(f, tab_layout[0]);
+                self.status_icons(f, tab_layout[1]);
                 
-                match self.selected_tab {
-                    MAIN => {
+                match FromPrimitive::from_usize(self.selected_tab) {
+                    Some(TabIndex::MAIN) => {
                         let main_layout = self.main_layout(tab_divider[1]);
                         self.contact_list(f, main_layout[0]);
 
@@ -179,15 +209,23 @@ impl Tui {
                         }
                         
                     }
-                    DEBUG => {
+                    Some(TabIndex::SETTINGS) => {
+                        let settings_layout = self.settings_layout(tab_divider[1]);
+                        let audio_options_layout = self.setting_audio_options(settings_layout[0]);
+                        self.settings_input_list(f, audio_options_layout[0]);
+                        self.settings_output_list(f, audio_options_layout[1]);
+                        self.settings_kbits_list(f, audio_options_layout[2]);
+
+                    }
+                    Some(TabIndex::DEBUG) => {
                         self.debug_messages(f, tab_divider[1]);
                     }
-                    _ => unreachable!()
+                    _ => unimplemented!("Unimplemented tab received")
                 }
 
             }).unwrap();
         }
-        terminal.backend_mut().queue(LeaveAlternateScreen).unwrap();
+        terminal.backend_mut().queue(LeaveAlternateScreen).unwrap().queue(DisableMouseCapture).unwrap();
         terminal.clear().unwrap();
 
         let err = err.lock().unwrap();
