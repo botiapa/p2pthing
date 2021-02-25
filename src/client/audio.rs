@@ -1,10 +1,11 @@
-use std::{collections::HashMap, sync::{Arc, Mutex}};
+use std::{collections::HashMap, sync::{Arc, Mutex}, time::Instant};
 
 use channel::unbounded;
 use cpal::{Device, Host, SampleFormat, traits::{DeviceTrait, HostTrait, StreamTrait}};
 use crossbeam::channel::{self, Sender};
 use magnum_opus::{Bitrate, Channels, Decoder, Encoder};
 use mio_misc::channel::Sender as MioSender;
+use ringbuf::{Producer, RingBuffer};
 use rubato::{FftFixedIn, InterpolationParameters, InterpolationType, Resampler, SincFixedIn, WindowFunction};
 
 use crate::common::{debug_message::DebugMessageType, encryption::NetworkedPublicKey, message_type::InterthreadMessage};
@@ -24,7 +25,7 @@ pub struct Audio {
     input_resampler: Option<FftFixedIn<f32>>,
     input_channels: Option<usize>,
     output_resampler: Option<SincFixedIn<f32>>,
-    out_s: Option<Sender<(NetworkedPublicKey, Vec<f32>)>>,
+    out_s: Option<Producer<(NetworkedPublicKey, Vec<f32>)>>,
     preferred_kbits: Option<i32>,
     preferred_input_device: Option<Device>,
     preferred_output_device: Option<Device>,
@@ -69,7 +70,7 @@ impl Audio{
             Ok(devices) => {
                 let d = devices.find(|d| d.name().unwrap() == name).unwrap();
                 self.preferred_input_device = Some(d);
-                if !self.muted {
+                if !self.muted { //FIXME
                     self.create_input_stream();
                 }
             }
@@ -266,7 +267,7 @@ impl Audio{
                 let decoder = Decoder::new(48000, channels).unwrap();
                 self.decoder = Some(decoder);
 
-                let (out_s, out_r) = unbounded();
+                let (out_s, mut out_r) = RingBuffer::<(NetworkedPublicKey, Vec<f32>)>::new(10).split();
                 self.out_s = Some(out_s);
 
                 let output_samplerate = default_config.sample_rate.0;
@@ -280,8 +281,9 @@ impl Audio{
                 self.output_stream = Some(device.build_output_stream(&default_config, 
                     move |output: &mut [f32], _: &cpal::OutputCallbackInfo| {
                             if !out_r.is_empty() {
+                                let start = Instant::now();
                                 let mut queue = HashMap::new();
-                                for (p, samples) in out_r.try_iter() {
+                                for (p, samples) in out_r.pop() {
                                     queue.insert(p, samples);
                                 }
                                 for i in 0..output.len() {
@@ -293,6 +295,7 @@ impl Audio{
                                     }
                                     output[i] = total / queue.values().len() as f32; // Average out the samples
                                 }
+                                println!("Elapsed: {:?}", start.elapsed());
                             }
                             else {
                                 for n in output {
@@ -369,10 +372,14 @@ impl Audio{
                 let s_ch = resampled.pop().unwrap();
 
                 let resampled = f_ch.into_iter().interleave(s_ch.into_iter()).collect::<Vec<f32>>();
-                buf.send((peer, resampled)).unwrap();
+                if buf.push((peer, resampled)).is_err() {
+                    panic!("Couldn't push new sample to ringbuffer (It's probably full)");
+                }
             }
             None => {
-                buf.send((peer, out[..read*2].to_vec())).unwrap();
+                if buf.push((peer, out[..read*2].to_vec())).is_err() {
+                    panic!("Couldn't push new sample to ringbuffer (It's probably full)");
+                }
             }
         }
     }

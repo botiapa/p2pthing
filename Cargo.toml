@@ -8,10 +8,10 @@ edition = "2018"
 
 [features]
 
-default = ["server", "client", "audio"]
+default = ["server", "client", "audio"] #MODIFYME WHEN IN PRODUCTION
 
 server = []
-client = ["crossterm", "tui", "textwrap"]
+client = ["crossterm", "tui", "textwrap", "ringbuf"]
 audio = ["cpal", "magnum-opus", "rubato"]
 win = ["dxgcap"]
 
@@ -45,3 +45,4 @@ textwrap = { version = "0.13", optional = true }
 cpal = { version =  "0.13.1", optional = true }
 magnum-opus  = { version =  "0.3.2", optional = true }
 rubato = { version = "0.7.0", optional = true}
+ringbuf = {version = "0.2.3", optional = true }

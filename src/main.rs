@@ -13,21 +13,29 @@ use std::env;
 pub fn main() {
     let args: Vec::<String> = env::args().collect();
     if args.len() == 1 {
-        println!("No argument found, assuming server role.");
-        let _ = RendezvousServer::start_server();
+        println!("No argument found, assuming client role.");
+        init_client();
     }
     else if args.len() >= 2 && args.len() <= 3 {
         if cfg!(feature = "client") && args[1].starts_with("c") {
-            println!("Starting as client");
-            #[cfg(feature = "client")]
-            start_client();
+            init_client();
         }
         else if args[1].starts_with("s") {
-            println!("Starting as server");
-            let _ = RendezvousServer::start_server();
+            init_server();
         }
     }
     else {
         println!("Too many argument received, exiting...")
     }
+}
+
+fn init_client() {
+    println!("Starting as client");
+    #[cfg(feature = "client")]
+    start_client();
+}
+
+fn init_server() {
+    println!("Starting as server");
+    let _ = RendezvousServer::start_server();
 }
