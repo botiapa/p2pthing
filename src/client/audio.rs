@@ -1,27 +1,30 @@
-use std::sync::{Arc, Mutex};
+use std::{collections::HashMap, sync::{Arc, Mutex}};
 
-use cpal::{Device, Host, Sample, SampleFormat, traits::{DeviceTrait, HostTrait, StreamTrait}};
+use channel::unbounded;
+use cpal::{Device, Host, SampleFormat, traits::{DeviceTrait, HostTrait, StreamTrait}};
+use crossbeam::channel::{self, Sender};
 use magnum_opus::{Bitrate, Channels, Decoder, Encoder};
-use mio_misc::channel::Sender;
-use ringbuf::{Producer, RingBuffer};
-use rubato::{InterpolationParameters, InterpolationType, Resampler, SincFixedIn, WindowFunction};
+use mio_misc::channel::Sender as MioSender;
+use rubato::{FftFixedIn, InterpolationParameters, InterpolationType, Resampler, SincFixedIn, WindowFunction};
 
-use crate::common::{debug_message::DebugMessageType, message_type::InterthreadMessage};
+use crate::common::{debug_message::DebugMessageType, encryption::NetworkedPublicKey, message_type::InterthreadMessage};
 use itertools::Itertools;
 
 use super::tui::Tui;
 
 pub struct Audio {
     host: Host,
-    ui_s: Sender<InterthreadMessage>,
-    cm_s: Sender<InterthreadMessage>,
+    ui_s: MioSender<InterthreadMessage>,
+    cm_s: MioSender<InterthreadMessage>,
     input_stream: Option<cpal::Stream>,
     output_stream: Option<cpal::Stream>,
     encoder: Arc<Mutex<Option<Encoder>>>,
     decoder: Option<Decoder>,
     muted: bool,
-    resampler: Option<SincFixedIn<f32>>,
-    buffer: Option<Producer<f32>>,
+    input_resampler: Option<FftFixedIn<f32>>,
+    input_channels: Option<usize>,
+    output_resampler: Option<SincFixedIn<f32>>,
+    out_s: Option<Sender<(NetworkedPublicKey, Vec<f32>)>>,
     preferred_kbits: Option<i32>,
     preferred_input_device: Option<Device>,
     preferred_output_device: Option<Device>,
@@ -29,7 +32,7 @@ pub struct Audio {
 }
 
 impl Audio{
-    pub fn new(ui_s: Sender<InterthreadMessage>, cm_s: Sender<InterthreadMessage>) -> Self {
+    pub fn new(ui_s: MioSender<InterthreadMessage>, cm_s: MioSender<InterthreadMessage>) -> Self {
         Audio {
             host: cpal::default_host(),
             ui_s,
@@ -39,8 +42,10 @@ impl Audio{
             encoder: Arc::new(Mutex::new(None)),
             decoder: None,
             muted: true,
-            resampler: None,
-            buffer: None,
+            input_resampler: None,
+            input_channels: None,
+            output_resampler: None,
+            out_s: None,
             preferred_kbits: None,
             preferred_input_device: None,
             preferred_output_device: None,
@@ -48,8 +53,6 @@ impl Audio{
         }
     }
 
-    //TODO: Split this into multiple functions; therefore disabling automatic recording
-    //TODO: Also rename this to init or something
     pub fn init(&mut self) {
         self.create_output_stream();
         if !self.muted {
@@ -66,7 +69,9 @@ impl Audio{
             Ok(devices) => {
                 let d = devices.find(|d| d.name().unwrap() == name).unwrap();
                 self.preferred_input_device = Some(d);
-                self.create_input_stream();
+                if !self.muted {
+                    self.create_input_stream();
+                }
             }
             _ => {}
         }
@@ -127,6 +132,31 @@ impl Audio{
         }
     }
 
+    pub fn resample_and_send_packet(&mut self, packet: Vec<f32>) {
+        let mut split = [Vec::with_capacity(packet.len()/2), Vec::with_capacity(packet.len()/2)];
+        for ch in packet.chunks_exact(self.input_channels.unwrap()) {
+            split[0].push(ch[0]);
+            match self.input_channels.unwrap() {
+                1 => split[1].push(ch[0]),
+                2 => split[1].push(ch[1]),
+                n => panic!("Invalid channel size: {}", n)
+            }
+        }
+        
+        let mut resampled = self.input_resampler.as_mut().unwrap().process(&split[..]).unwrap();
+        let f_ch = resampled.pop().unwrap();
+        let s_ch = resampled.pop().unwrap();
+
+        let resampled = f_ch.into_iter().interleave(s_ch.into_iter()).collect::<Vec<f32>>();
+
+        let mut output = [0u8; 2000];
+        let mut lock = self.encoder.lock();
+        let encoder = lock.as_mut().unwrap().as_mut().unwrap();
+        let sent = encoder.encode_float(&resampled[..], &mut output).unwrap();
+
+        self.cm_s.send(InterthreadMessage::OpusPacketReady(output[..sent].to_vec())).unwrap();
+    }
+
     fn create_input_stream(&mut self) {
         let default_input = &self.host.default_input_device();
         let device = match &self.preferred_input_device {
@@ -160,11 +190,21 @@ impl Audio{
                     c => panic!("Invalid channels detected: {}", c)
                 };
 
-                let mut encoder = Encoder::new(default_config.sample_rate.0, channels, magnum_opus::Application::Voip).unwrap();
+                let mut encoder = Encoder::new(48000, channels, magnum_opus::Application::Voip).unwrap();
                 encoder.set_bitrate(bitrate).unwrap();
 
                 let encoder = Arc::new(Mutex::new(Some(encoder)));
                 self.encoder = Arc::clone(&encoder);
+
+                let sample_rate = default_config.sample_rate.0;
+                if sample_rate != 48000 {
+                    self.input_resampler = Some(Audio::get_resampler_new(
+                        sample_rate as usize, 
+                        48000, 
+                        channels as usize, 
+                        sample_rate as usize / 50 as usize / channels as usize));
+                    self.input_channels = Some(channels as usize);
+                }
 
                 self.input_stream = Some(match supported_default_config.sample_format() {
                     SampleFormat::I16 => unimplemented!("I16 input is not supported yet"),
@@ -172,12 +212,19 @@ impl Audio{
                     SampleFormat::F32 => 
                         device.build_input_stream(&default_config,
                 move |data: &[f32], _: &_| {
-                                let mut output = [0u8; 2000];
-                                let mut lock = encoder.lock();
-                                let encoder = lock.as_mut().unwrap().as_mut().unwrap();
-                                let sent = encoder.encode_float(data, &mut output).unwrap();
-
-                                cm_s.send(InterthreadMessage::OpusPacketReady(output[0..sent].to_vec())).unwrap();
+                                //let max = data.iter().fold(0.0f32, |max, &val| if val > max{ val } else{ max });
+                                //println!("Max: {}", max);
+                                if sample_rate == 48000 {
+                                    let mut output = [0u8; 2000];
+                                    let mut lock = encoder.lock();
+                                    let encoder = lock.as_mut().unwrap().as_mut().unwrap();
+                                    let sent = encoder.encode_float(data, &mut output).unwrap();
+    
+                                    cm_s.send(InterthreadMessage::OpusPacketReady(output[0..sent].to_vec())).unwrap();
+                                }
+                                else {
+                                    cm_s.send(InterthreadMessage::PacketReadyForResampling(data.to_vec())).unwrap();
+                                }
                             },
                             move |err| {
                                 Tui::debug_message(&format!("Read error from input err: {}", err), DebugMessageType::Error, &ui_s);
@@ -191,7 +238,7 @@ impl Audio{
         }
    
     }
-
+ 
     fn create_output_stream(&mut self) {
         let default_output = &self.host.default_output_device();
         let device = match &self.preferred_output_device {
@@ -219,25 +266,37 @@ impl Audio{
                 let decoder = Decoder::new(48000, channels).unwrap();
                 self.decoder = Some(decoder);
 
-                let (prod, mut cons) = RingBuffer::<f32>::new(5760*2).split();
-                self.buffer = Some(prod);
+                let (out_s, out_r) = unbounded();
+                self.out_s = Some(out_s);
 
                 let output_samplerate = default_config.sample_rate.0;
                 let channel_num = default_config.channels;
 
                 if output_samplerate != 48000 {
                     let resampler = Audio::get_resampler(48000, default_config.sample_rate.0 as usize, channel_num as usize, 480);
-                    self.resampler = Some(resampler);
+                    self.output_resampler = Some(resampler);
                 }
 
                 self.output_stream = Some(device.build_output_stream(&default_config, 
                     move |output: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                            // This is not optimized, however it's fast enough (2µs on average), and it avoids a beeping noise
-                            // TODO: Optimize me
-                            for i in 0..output.len() {
-                                match cons.pop() {
-                                    Some(item) => output[i] = Sample::from::<f32>(&item),
-                                    None => output[i] = Sample::from::<f32>(&0.0)
+                            if !out_r.is_empty() {
+                                let mut queue = HashMap::new();
+                                for (p, samples) in out_r.try_iter() {
+                                    queue.insert(p, samples);
+                                }
+                                for i in 0..output.len() {
+                                    let mut total = 0f32;
+                                    for samples in queue.values() {
+                                        if i < samples.len() {
+                                            total += samples[i];
+                                        }
+                                    }
+                                    output[i] = total / queue.values().len() as f32; // Average out the samples
+                                }
+                            }
+                            else {
+                                for n in output {
+                                    *n = 0.0;
                                 }
                             }
                         }
@@ -272,7 +331,17 @@ impl Audio{
         )
     }
 
-    pub fn decode_and_queue_packet(&mut self, data: &[u8]) {
+    pub fn get_resampler_new(in_hz: usize, out_hz: usize, ch_in: usize, chunk_size: usize) -> FftFixedIn<f32> {
+        FftFixedIn::<f32>::new(
+             in_hz,
+             out_hz,
+            chunk_size,
+            4,
+            ch_in,
+        )
+    }
+
+    pub fn decode_and_queue_packet(&mut self, data: &[u8], peer: NetworkedPublicKey) {
         let decoder = self.decoder.as_mut().unwrap();
         
         let channels = magnum_opus::packet::get_nb_channels(data).unwrap();
@@ -284,8 +353,8 @@ impl Audio{
         let mut out = [0f32; 5760*2];
         let read = decoder.decode_float(&data, &mut out, false).unwrap(); // reads 480 samples per channel
 
-        let buf = self.buffer.as_mut().unwrap();
-        match self.resampler.as_mut() {
+        let buf = self.out_s.as_mut().unwrap();
+        match self.output_resampler.as_mut() {
             Some(resampler) => {
                 let mut split = [Vec::with_capacity(read), Vec::with_capacity(read)];
                 for ch in out[..read*num_channels].chunks_exact(num_channels) {
@@ -299,11 +368,11 @@ impl Audio{
                 let f_ch = resampled.pop().unwrap();
                 let s_ch = resampled.pop().unwrap();
 
-                let mut resampled = f_ch.into_iter().interleave(s_ch.into_iter());
-                buf.push_iter(&mut resampled);
+                let resampled = f_ch.into_iter().interleave(s_ch.into_iter()).collect::<Vec<f32>>();
+                buf.send((peer, resampled)).unwrap();
             }
             None => {
-                buf.push_slice(&out[..read*2]);
+                buf.send((peer, out[..read*2].to_vec())).unwrap();
             }
         }
     }

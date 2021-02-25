@@ -5,7 +5,7 @@ use mio::Token;
 
 use crate::{client::tui::Tui, common::{debug_message::DebugMessageType, encryption::SymmetricEncryption, lib::read_exact, message_type::{InterthreadMessage, MsgType, msg_types::{self, Call}, Peer}}};
 
-use super::{ConnectionManager, KEEP_ALIVE_DELAY_MIDCALL, UdpConnection, UdpConnectionState};
+use super::{ConnectionManager, UdpConnection, UdpConnectionState};
 
 impl ConnectionManager {
     pub fn read_tcp_message(&mut self, msg_type: u8, _: Token) {
@@ -73,48 +73,31 @@ impl ConnectionManager {
 
     /// Handle incoming call
     fn on_call(&mut self, _: SocketAddr, call: Call) {
-        let caller = call.clone().caller.unwrap();
-        let udp_address = caller.udp_addr.unwrap();
+        let caller = call.caller.unwrap();
+        let udp_address = call.udp_address.unwrap();
 
-        // FIXME: add the ability to decline the call
-
-        let msg = msg_types::CallResponse {
-            call: call.clone(),
-            response: true
-        };
-        
-        // Notify the UI of the incoming call
-        self.ui_s.send(InterthreadMessage::Call(caller.public_key.clone())).unwrap();
-
-        self.send_tcp_message(MsgType::CallResponse, &msg).unwrap();
-
-        let p = self.peers.iter_mut().find(|p| p.public_key == caller.public_key).unwrap();
-        p.udp_addr = Some(udp_address);
-
-        let mut conn = UdpConnection::new(UdpConnectionState::MidCall, udp_address, self.udp_socket.clone(), None, self.encryption.clone());
-        conn.associated_peer = Some(caller.public_key.clone());
-        Tui::debug_message(
-            &format!("Accepted call from peer ({};{}), starting the punch through protocol", 
-                caller.public_key, conn.address), 
-        DebugMessageType::Log, &self.ui_s);
-
+        let mut conn = UdpConnection::new(UdpConnectionState::Pending, udp_address, self.udp_socket.clone(), None, self.encryption.clone());
+        conn.associated_peer = Some(caller.clone());
         self.udp_connections.push(conn);
+
+        // Notify the UI of the incoming call
+        self.ui_s.send(InterthreadMessage::Call(caller)).unwrap();
     }
 
     /// Handle the response to a sent call
-    fn on_call_response<'a>(&mut self, _: SocketAddr, call_response: CallResponse) {
+    fn on_call_response(&mut self, _: SocketAddr, call_response: CallResponse) {
         let call = call_response.call;
         if !call_response.response {
             let i = self.calls_in_progress.iter()
             .position(|(c, _)| c.callee == call.callee)
             .unwrap();
             self.calls_in_progress.remove(i);
-            self.ui_s.send(InterthreadMessage::CallDenied(call.callee.public_key)).unwrap();
+            self.ui_s.send(InterthreadMessage::CallDenied(call.callee)).unwrap();
         }
         else {
-            let udp_address = call.callee.udp_addr.unwrap();
+            let udp_address = call.udp_address.unwrap();
         
-            let p = self.peers.iter_mut().find(|p| p.public_key == call.callee.public_key).unwrap();
+            let p = self.peers.iter_mut().find(|p| p.public_key == call.callee).unwrap();
             p.udp_addr = Some(udp_address);
             
             let i = self.calls_in_progress.iter()
@@ -124,10 +107,9 @@ impl ConnectionManager {
     
             let sym_key = SymmetricEncryption::new();
             let mut conn = UdpConnection::new(UdpConnectionState::MidCall, udp_address, self.udp_socket.clone(), Some(sym_key), self.encryption.clone());
-            conn.associated_peer = Some(call.callee.public_key.clone());
+            conn.associated_peer = Some(call.callee.clone());
             Tui::debug_message(
-            &format!("A sent call has been accepted by peer ({};{}), starting the punch through protocol",
-            call.callee.public_key, conn.address),
+            &format!("A sent call has been accepted by peer ({};{}), starting the punch through protocol", call.callee, conn.address),
         DebugMessageType::Log, &self.ui_s);
 
             conn.send_udp_message_with_public_key(MsgType::AnnounceSecret, &AnnounceSecret{secret: conn.symmetric_key.as_ref().unwrap().secret.clone()}, true, None).unwrap();

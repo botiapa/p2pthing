@@ -78,7 +78,7 @@ impl RendezvousServer {
 
     fn on_call(&mut self, addr: SocketAddr, call: &mut Call) {
         if let Some(caller) = self.peers.iter().find(|x| x.addr.unwrap() == addr) {
-            if let Some(callee) = self.peers.iter().find(|x| x.public_key == call.callee.public_key) {
+            if let Some(callee) = self.peers.iter().find(|x| x.public_key == call.callee) {
                 if caller.udp_addr.is_none() || callee.udp_addr.is_none() {
                     let caller_token = self.addresses.get(&caller.addr.unwrap()).unwrap();
                     let mut caller_socket = self.tcp_connections.get_mut(caller_token).unwrap();
@@ -87,20 +87,22 @@ impl RendezvousServer {
                         response: false
                     });
                     println!("Error routing a call from ({}; {}) to ({}; {}) udp address hasn't been found", addr, caller.public_key, callee.addr.unwrap(), callee.public_key);
-                    return;
                 }
-                let req = CallRequest{
-                    caller: caller.clone(),
-                    callee: callee.clone(),
-                    time: Instant::now()
-                };
-                self.calls.push(req);
-                // Don't trust the client
-                call.caller = Some(caller.clone());
-                let token = self.addresses.get(&callee.addr.unwrap()).unwrap();
-                let mut callee_socket = self.tcp_connections.get_mut(token).unwrap();
-                RendezvousServer::send_tcp_message(&mut callee_socket, MsgType::Call, &call);
-                println!("Routed a call from ({}; {}) to ({}; {})", addr, caller.public_key, callee_socket.peer_addr().unwrap(), callee.public_key);
+                else {
+                    let req = CallRequest{
+                        caller: caller.clone(),
+                        callee: callee.clone(),
+                        time: Instant::now()
+                    };
+                    self.calls.push(req);
+                    // Don't trust the client
+                    call.caller = Some(caller.clone().public_key);
+                    let token = self.addresses.get(&callee.addr.unwrap()).unwrap();
+                    let mut callee_socket = self.tcp_connections.get_mut(token).unwrap();
+                    call.udp_address = caller.udp_addr;
+                    RendezvousServer::send_tcp_message(&mut callee_socket, MsgType::Call, &call);
+                    println!("Routed a call from ({}; {}) to ({}; {})", addr, caller.public_key, callee_socket.peer_addr().unwrap(), callee.public_key);
+                }
             }
             else {
                 println!("Callee haven't announced itself yet");
@@ -114,26 +116,32 @@ impl RendezvousServer {
     fn on_call_response(&mut self, _: SocketAddr, call_response: CallResponse) {
         let callee = call_response.call.callee;
         let caller = call_response.call.caller.unwrap();
-        match self.calls.iter().position(|x| x.callee.public_key == callee.public_key && x.caller.public_key == caller.public_key) {
+        match self.calls.iter().position(|x| x.callee.public_key == callee && x.caller.public_key == caller) {
             Some(index) => {
                 if call_response.response {
-                    println!("Peer ({}) accepted the call request from ({})", callee.public_key, caller.public_key);
+                    println!("Peer ({}) accepted the call request from ({})", callee, caller);
                     
-                    let mut sock = self.tcp_connections.values_mut().find(|x| x.peer_addr().unwrap() == caller.addr.unwrap()).unwrap();
-                    let callee = self.peers.iter().find(|p| p.public_key == callee.public_key).unwrap().clone(); // Get the callee so the address is included
+                    let caller_peer = self.peers.iter().find(|p| p.public_key == caller).unwrap();
+                    let callee_peer = self.peers.iter().find(|p| p.public_key == callee).unwrap().clone();
+                    let mut sock = self.tcp_connections.values_mut().find(|x| x.peer_addr().unwrap() == caller_peer.addr.unwrap()).unwrap();
+                    
                     let msg = msg_types::CallResponse {
                         call: Call {
                             callee,
                             caller: Some(caller),
+                            udp_address: Some(callee_peer.udp_addr.unwrap())
                         },
                         response: call_response.response,
                     };
                     RendezvousServer::send_tcp_message(&mut sock, MsgType::CallResponse, &msg);
                 }
+                else {
+                    println!("Peer ({}) denied the call request from ({})", callee, caller);
+                }
                 self.calls.remove(index);
             }
             None => {
-                println!("Peer ({}) accepted call that wasn't in the database", callee.public_key);
+                println!("Peer ({}) accepted call that wasn't in the database", callee);
             }
         }
     }

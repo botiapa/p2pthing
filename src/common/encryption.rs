@@ -39,7 +39,7 @@ impl AsymmetricEncryption {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub struct NetworkedPublicKey {
     n: String,
     e: String

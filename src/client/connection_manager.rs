@@ -1,12 +1,12 @@
 use mio_misc::{NotificationId, channel::channel, queue::NotificationQueue};
 use msg_types::{Call};
 use mio::{Interest, Poll, Waker, net::{TcpStream, UdpSocket}};
-use std::{net::SocketAddr, ops::Add, rc::Rc, str::FromStr, sync::{Arc}, thread::{self, JoinHandle}, time::{Duration, Instant}};
+use std::{net::SocketAddr, rc::Rc, str::FromStr, sync::{Arc}, thread::{self, JoinHandle}, time::{Duration, Instant}};
 use mio_misc::channel::Sender;
 
 use mio::Token;
 
-use crate::common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption}, message_type::{InterthreadMessage, MsgEncryption, MsgType, Peer, UdpPacket, msg_types}};
+use crate::common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption}, message_type::{InterthreadMessage, MsgType, Peer, UdpPacket, msg_types}};
 
 use super::{audio::Audio, udp_connection::{UdpConnection, UdpConnectionState}};
 

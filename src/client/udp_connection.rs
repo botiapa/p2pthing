@@ -16,7 +16,9 @@ pub enum UdpConnectionState {
     /// The socket is 'connected' so only keep alive packets need to be sent
     Connected=1,
     /// The socket is waiting for the server to accept the announce
-    Unannounced=2
+    Unannounced=2,
+    /// We are waiting for the ui to decide whether we should start connecting
+    Pending=3
 }
 
 pub struct UdpConnection {
@@ -34,7 +36,9 @@ pub struct UdpConnection {
     pub symmetric_key: Option<SymmetricEncryption>,
     /// Is a symmetrically encrypted tunnel created?
     pub upgraded: bool,
-    pub encryption: Rc<AsymmetricEncryption>
+    pub encryption: Rc<AsymmetricEncryption>,
+    pub sent_bytes: u64,
+    pub read_bytes: u64
 }
 
 impl UdpConnection{
@@ -51,7 +55,9 @@ impl UdpConnection{
             symmetric_key,
             received_messages: vec![],
             upgraded: false,
-            encryption
+            encryption,
+            sent_bytes: 0,
+            read_bytes: 0,
         }
     }
 
@@ -141,6 +147,7 @@ impl UdpConnection{
         }
 
         self.sock.send_to(wrapped_data, self.address).unwrap();
+        self.sent_bytes = wrapped_data.len() as u64;
         self.last_message_sent = Some(Instant::now());
     }
 
@@ -148,7 +155,8 @@ impl UdpConnection{
         let delay = match self.state {
             UdpConnectionState::MidCall => KEEP_ALIVE_DELAY_MIDCALL,
             UdpConnectionState::Connected => KEEP_ALIVE_DELAY,
-            UdpConnectionState::Unannounced => ANNOUNCE_DELAY
+            UdpConnectionState::Unannounced => ANNOUNCE_DELAY,
+            UdpConnectionState::Pending => Duration::new(u64::MAX, 0)
         };
         match self.last_message_sent {
             Some(last_message_sent) => {

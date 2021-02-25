@@ -1,6 +1,5 @@
 use std::{io::{stdout}, panic, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}, mpsc::Receiver}};
 
-use cpal::Device;
 use crossterm::{ErrorKind, QueueableCommand, event::{DisableMouseCapture, EnableMouseCapture, Event}, execute, terminal::{EnterAlternateScreen, LeaveAlternateScreen, enable_raw_mode}};
 use mio::{Events, Poll, Token, Waker};
 use mio_misc::{NotificationId, channel::{Sender, channel}, queue::NotificationQueue};
@@ -10,12 +9,13 @@ use tui::{Terminal, backend::{CrosstermBackend}, widgets::ListState};
 
 use crate::common::{debug_message::{DebugMessage, DebugMessageType}, encryption::NetworkedPublicKey, message_type::{InterthreadMessage, Peer}};
 
-use self::ui_peer::UIPeer;
+use self::{popup::Popup, ui_peer::UIPeer};
 
 mod events;
 mod blocks;
 mod chat_input;
 mod ui_peer;
+mod popup;
 
 #[derive(PartialEq)]
 enum ActiveBlock {
@@ -67,7 +67,8 @@ pub struct Tui {
     is_active: bool,
     own_public_key: Option<NetworkedPublicKey>,
     calls: Vec<CallStatusHolder>,
-    next_msg_id: u32
+    next_msg_id: u32,
+    active_popup: Option<Box<dyn Popup>>
 }
 
 #[derive(FromPrimitive)]
@@ -103,8 +104,8 @@ impl Tui {
             running: Arc::new(AtomicBool::new(true)),
             debug_messages: vec![],
             debug_messages_state: ListState::default(),
-            chat_messages_list_state: None,
             chat_messages_length: 0,
+            chat_messages_list_state: None,
             settings_inputs: None,
             settings_inputs_state: ListState::default(),
             settings_outputs: None,
@@ -118,7 +119,7 @@ impl Tui {
             own_public_key: None,
             calls: vec![],
             next_msg_id: 0,
-            
+            active_popup: None
         }
     }
 
@@ -222,7 +223,12 @@ impl Tui {
                     }
                     _ => unimplemented!("Unimplemented tab received")
                 }
-
+                match &mut self.active_popup {
+                    Some(popup) => {
+                        popup.draw(f, screen);
+                    }
+                    None => {}
+                }
             }).unwrap();
         }
         terminal.backend_mut().queue(LeaveAlternateScreen).unwrap().queue(DisableMouseCapture).unwrap();

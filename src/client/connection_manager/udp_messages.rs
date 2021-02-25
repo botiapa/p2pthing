@@ -15,9 +15,8 @@ impl ConnectionManager {
                 return;
             }
         };
-        
-
         let udp_packet: UdpPacket = bincode::deserialize(&buf).unwrap();
+        conn.read_bytes += bincode::serialized_size(&udp_packet).unwrap();
         if conn.received_messages.contains(&udp_packet.msg_id) { // If already received this message
             return;
         }
@@ -136,6 +135,8 @@ impl ConnectionManager {
     fn on_opus_packet(&mut self, addr: SocketAddr, data: &[u8]) {
         let data: Vec<u8> = bincode::deserialize(data).unwrap();
         let p = self.peers.iter().find(|p| p.udp_addr.unwrap() == addr).unwrap();
-        self.audio.decode_and_queue_packet(&data[..]);
+
+
+        self.audio.decode_and_queue_packet(&data[..], p.public_key.clone());
     }
 }

@@ -1,17 +1,16 @@
 use core::panic;
-use std::{any::Any, ops::Deref, sync::{atomic::Ordering, mpsc::TryRecvError}, thread};
+use std::{sync::{atomic::Ordering, mpsc::TryRecvError}, thread};
 
 use chrono::Utc;
-use cpal::traits::DeviceTrait;
 use crossterm::event::{Event, KeyCode, KeyModifiers, read};
 use num::FromPrimitive;
 
-use super::{ActiveBlock, CHOOSABLE_KBITS, CallStatus, CallStatusHolder, DebugMessageType, TabIndex, Tui, ui_peer::{ChatMessage, UIPeer}};
+use super::{ActiveBlock, CHOOSABLE_KBITS, CallStatus, CallStatusHolder, DebugMessageType, TabIndex, Tui, popup::PopupReturn, ui_peer::{ChatMessage, UIPeer}};
 use super::super::connection_manager::ConnectionManager;
-use crate::common::message_type::{*, self, Peer};
+use crate::common::message_type::{*, Peer};
+use super::popup::call_popup::CallPopup;
 
 impl Tui {
-
     pub fn handle_interthread_events(&mut self) {
         for msg in self.ui_r.try_iter() {
             match msg {
@@ -35,7 +34,22 @@ impl Tui {
                         _ => {}
                     }
                 },
-                InterthreadMessage::Call(public_key) | InterthreadMessage::CallAccepted(public_key) => {
+                InterthreadMessage::Call(public_key) => {
+                    if self.active_popup.is_some() {
+                        unimplemented!("Need to display a new popup while one is still displayed");
+                    }
+                    self.active_popup = Some(Box::new(CallPopup::new(
+                        public_key.clone()
+                    )));
+                    match self.calls.iter_mut().find(|c| c.public_key == public_key) {
+                        Some(call) => call.status = CallStatus::SentRequest,
+                        None => self.calls.push(CallStatusHolder{
+                            status: CallStatus::SentRequest, 
+                            public_key: public_key.clone()
+                        })
+                    }
+                }
+                InterthreadMessage::CallAccepted(public_key) => {
                     match self.calls.iter_mut().find(|c| c.public_key == public_key) {
                         Some(call) => call.status = CallStatus::PunchThroughInProgress,
                         None => self.calls.push(CallStatusHolder{
@@ -138,22 +152,48 @@ impl Tui {
         }
     }
 
+    fn handle_popup_return_value(&mut self, ret: PopupReturn) {
+        match ret {
+            PopupReturn::AcceptCall(p) => {
+                self.cm_s.as_ref().unwrap().send(InterthreadMessage::CallAccepted(p.clone())).unwrap();
+                self.calls.iter_mut().find(|c| c.public_key == p).unwrap().status = CallStatus::PunchThroughInProgress;
+            },
+            PopupReturn::DenyCall(p) => {
+                self.cm_s.as_ref().unwrap().send(InterthreadMessage::CallDenied(p.clone())).unwrap();
+                let i = self.calls.iter_mut().position(|c| c.public_key == p).unwrap();
+                self.calls.remove(i);
+            }
+        }
+        self.active_popup = None;
+    }
+
     pub fn handle_keyboard_mouse_events(&mut self) {
         loop {
             match self.event_r.try_recv() {
                 Ok(e) => {
                     match e {
                         Ok(e) => {
-                            match &self.active_block {
-                                ActiveBlock::ContactList => self.handle_contact_list_event(e),
-                                ActiveBlock::ChatMessages => self.handle_chat_messages_event(e),
-                                ActiveBlock::ChatInput => self.handle_chat_input_event(e),
-                                ActiveBlock::InputList => self.handle_input_list_event(e),
-                                ActiveBlock::OutputList => self.handle_output_list_event(e),
-                                ActiveBlock::BitRateList => self.handle_bitrate_list_event(e),
-                                ActiveBlock::Tabs => self.handle_tabs_input_event(e)
+                            match &mut self.active_popup {
+                                Some(popup) => {
+                                    match popup.handle_event(e) {
+                                        Some(ret) => self.handle_popup_return_value(ret),
+                                        None => {}
+                                    }
+                                }
+                                None => {
+                                    match &self.active_block {
+                                        ActiveBlock::ContactList => self.handle_contact_list_event(e),
+                                        ActiveBlock::ChatMessages => self.handle_chat_messages_event(e),
+                                        ActiveBlock::ChatInput => self.handle_chat_input_event(e),
+                                        ActiveBlock::InputList => self.handle_input_list_event(e),
+                                        ActiveBlock::OutputList => self.handle_output_list_event(e),
+                                        ActiveBlock::BitRateList => self.handle_bitrate_list_event(e),
+                                        ActiveBlock::Tabs => self.handle_tabs_input_event(e)
+                                    }
+                                    self.handle_global_event(e);
+                                }
                             }
-                            self.handle_global_event(e);
+                            self.handle_quit_event(e);
                         }
                         Err(err) => self.log_message(format!("Error while reading events: {}", err.to_string()), DebugMessageType::Error)
                     }
@@ -166,6 +206,17 @@ impl Tui {
                 }
                 
             }
+        }
+    }
+
+    fn handle_quit_event(&mut self, e: Event) {
+        match e {
+            Event::Key(e) => {
+                if e.code == KeyCode::Char('q') || (e.code == KeyCode::Char('c') && e.modifiers == KeyModifiers::CONTROL) {
+                    self.running.store(false, Ordering::SeqCst);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -189,7 +240,7 @@ impl Tui {
                         self.active_block = ActiveBlock::Tabs;
                         self.is_active = false;
                     }
-                    KeyCode::Char('m') => {
+                    KeyCode::Char('m') | KeyCode::Char('M') if self.active_block != ActiveBlock::ChatInput || (self.active_block == ActiveBlock::ChatInput &&!self.is_active) => {
                         self.muted = !self.muted;
                         self.cm_s.as_ref().unwrap().send(InterthreadMessage::AudioChangeMuteState(self.muted)).unwrap();
                     }
@@ -204,9 +255,6 @@ impl Tui {
                         }
                     }
                     _ => {}
-                }
-                if e.code == KeyCode::Char('q') || (e.code == KeyCode::Char('c') && e.modifiers == KeyModifiers::CONTROL) {
-                    self.running.store(false, Ordering::SeqCst);
                 }
             }
             Event::Mouse(_) => {}

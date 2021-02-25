@@ -15,6 +15,7 @@ pub enum InterthreadMessage {
     PeerDisconnected(NetworkedPublicKey),
     Call(NetworkedPublicKey),
     OpusPacketReady(Vec<u8>),
+    PacketReadyForResampling(Vec<f32>),
     DebugMessage(String, DebugMessageType),
     ConnectToServer(),
     AudioChangeInputDevice(String),
@@ -100,6 +101,8 @@ pub struct UdpPacket {
 }
 
 pub mod msg_types {
+    use std::net::SocketAddr;
+
     use serde::{Serialize, Deserialize};
     use crate::common::encryption::NetworkedPublicKey;
 
@@ -125,8 +128,10 @@ pub mod msg_types {
     
     #[derive(Serialize, Deserialize, Clone, PartialEq)]
     pub struct Call {
-        pub callee: Peer,
-        pub caller: Option<Peer>
+        pub callee: NetworkedPublicKey,
+        pub caller: Option<NetworkedPublicKey>,
+        /// This is either the callee's or caller's udp address or none, depending on who sent it, and who is the recipient
+        pub udp_address: Option<SocketAddr>
     }
 
     #[derive(Serialize, Deserialize)]

@@ -1,9 +1,9 @@
-use std::{error::Error, io::{self, Read}, net::Shutdown, sync::mpsc::{self, Receiver}, thread, time::{Duration, Instant}};
+use std::{io::{self, Read}, net::Shutdown, sync::mpsc::{self, Receiver}, thread, time::{Duration, Instant}};
 
 use io::ErrorKind;
 use mio::{Events, Interest, net::TcpStream};
 
-use crate::{client::{tui::Tui, udp_connection::UdpConnectionState}, common::{debug_message::DebugMessageType, message_type::{InterthreadMessage, MsgType, Peer, msg_types}}};
+use crate::{client::{tui::Tui, udp_connection::UdpConnectionState}, common::{debug_message::DebugMessageType, message_type::{InterthreadMessage, MsgType, msg_types}}};
 
 use super::{ANNOUNCE_DELAY, CALL_DECAY, ConnectionManager, KEEP_ALIVE_DELAY, KEEP_ALIVE_DELAY_MIDCALL, RECONNECT_DELAY, RENDEZVOUS, UDP_SOCKET, WAKER};
 
@@ -80,6 +80,7 @@ impl ConnectionManager {
                         }
                     }
                 }
+                UdpConnectionState::Pending => {}
             };
         }
     }
@@ -112,11 +113,48 @@ impl ConnectionManager {
                                 }
                             }
                         }
+                        InterthreadMessage::PacketReadyForResampling(data) => self.audio.resample_and_send_packet(data),
                         InterthreadMessage::OnChatMessage(p, msg) => Tui::on_chat_message(&self.ui_s, p, msg),
                         InterthreadMessage::ConnectToServer() => {
                             self.rendezvous_socket = TcpStream::connect(self.rendezvous_ip).unwrap();
                             self.poll.registry().register(&mut self.rendezvous_socket, RENDEZVOUS, Interest::READABLE).unwrap();
                             Tui::debug_message("Trying to connect to server", DebugMessageType::Log, &self.ui_s);
+                        }
+                        InterthreadMessage::CallAccepted(p) => {
+                            let msg = msg_types::CallResponse {
+                                call: msg_types::Call {
+                                    callee: self.encryption.get_public_key().clone(),
+                                    caller: Some(p.clone()),
+                                    udp_address: None
+                                },
+                                response: true
+                            };
+
+                            self.send_tcp_message(MsgType::CallResponse, &msg).unwrap();
+
+                            let conn = self.udp_connections.iter_mut().find(|c| c.associated_peer.is_some() && c.associated_peer.clone().unwrap() == p).unwrap();
+                            conn.state = UdpConnectionState::MidCall;
+                            let peer = self.peers.iter_mut().find(|peer| peer.public_key == p).unwrap();
+                            peer.udp_addr = Some(conn.address);
+                            
+                            Tui::debug_message(&format!("Accepted call from peer ({};{}), starting the punch through protocol", p, conn.address), 
+                            DebugMessageType::Log, &self.ui_s);
+                        }
+                        InterthreadMessage::CallDenied(p) => {
+                            let msg = msg_types::CallResponse {
+                                call: msg_types::Call {
+                                    callee: self.encryption.get_public_key().clone(),
+                                    caller: Some(p.clone()),
+                                    udp_address: None
+                                },
+                                response: false
+                            };
+
+                            self.send_tcp_message(MsgType::CallResponse, &msg).unwrap();
+
+                            let i = self.udp_connections.iter().position(|c| c.associated_peer.is_some() && c.associated_peer.clone().unwrap() == p).unwrap();
+                            let conn = self.udp_connections.remove(i);
+                            Tui::debug_message(&format!("Denied call from peer ({};{})", p, conn.address), DebugMessageType::Log, &self.ui_s);
                         }
                         InterthreadMessage::Call(p) => {
                             let peer = self.peers.iter().find(|peer| peer.public_key == p).unwrap();
@@ -125,8 +163,9 @@ impl ConnectionManager {
                                 continue;
                             }
                             let call = msg_types::Call {
-                                callee: Peer{ addr: None, udp_addr: None, public_key: p.clone(), sym_key: None},
-                                caller: None
+                                callee: p.clone(),
+                                caller: None,
+                                udp_address: None
                             };
                             match self.calls_in_progress.iter().find(|(c, _)| c == &call) {
                                 Some(_) => Tui::debug_message(&format!("Tried to call a peer which has already been called: {}", p), DebugMessageType::Warning, &self.ui_s),

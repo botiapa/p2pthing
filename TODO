@@ -16,8 +16,6 @@ TODO
 - Ping and speed/bandwidth detection
 - Number of wakeups/packets/data /s
     - Custom audio hooking into applications
-- Implement reliable udp messages
-    - Rewrite chat message type so it uses this system
 - Chat messages fix min
 - Test if next_resendable() actually works correctly
 - Remove disconnected peers
@@ -25,6 +23,14 @@ TODO
         - Maybe after 5 lost packets?
 - Audio maybe add packet loss detection (fec in opus)
 - TUI settings tab
+    - Audio options
+        - Input device
+        - Output device
+        - Bitrate
+        - Noise cancelling
+- Split TUI into smaller chunks
+- Send udp announce after disconnecting and reconnecting 
+from and to the rendezvous server
 
 ARCHITECTURE
 -----------
