@@ -5,7 +5,7 @@ use mio::{Events, Interest, net::TcpStream};
 
 use crate::{client::{tui::Tui, udp_connection::UdpConnectionState}, common::{debug_message::DebugMessageType, message_type::{InterthreadMessage, MsgType, msg_types}}};
 
-use super::{ANNOUNCE_DELAY, CALL_DECAY, ConnectionManager, KEEP_ALIVE_DELAY, KEEP_ALIVE_DELAY_MIDCALL, RECONNECT_DELAY, RENDEZVOUS, UDP_SOCKET, WAKER};
+use super::{ANNOUNCE_DELAY, CALL_DECAY, ConnectionManager, KEEP_ALIVE_DELAY, KEEP_ALIVE_DELAY_MIDCALL, RECONNECT_DELAY, RENDEZVOUS, STATS_UPDATE_DELAY, UDP_SOCKET, WAKER};
 
 impl ConnectionManager {
     pub fn event_loop(&mut self, r: &mut Receiver<InterthreadMessage>) {
@@ -39,6 +39,9 @@ impl ConnectionManager {
 
             // Handle IO events
             self.handle_io_events(&events);
+
+            // Send UI updates
+            self.send_ui_updates();
         }
     }
 
@@ -260,6 +263,19 @@ impl ConnectionManager {
         }
     }
 
+    fn send_ui_updates(&mut self) {
+        if self.last_stats_update.elapsed() > STATS_UPDATE_DELAY {
+            let mut stats = vec![];
+            for c in &mut self.udp_connections {
+                if let Some(p) = &c.associated_peer {
+                    stats.push((p.clone(), c.statistics.clone()));
+                }
+            }
+            self.ui_s.send(InterthreadMessage::ConnectionStatistics(stats)).unwrap();
+            self.last_stats_update = Instant::now();
+        }
+    }
+
     /// Lists the next timeouts, and also sorts the list, so the first one is always the smallest
     fn get_next_timeouts(&mut self, durations: &mut Vec<Duration>) {
         for conn in &mut self.udp_connections {
@@ -269,6 +285,8 @@ impl ConnectionManager {
             }
             durations.push(conn.next_keep_alive());
         }
+        let next_stats_update = (self.last_stats_update + STATS_UPDATE_DELAY).checked_duration_since(self.last_stats_update).unwrap_or(Duration::from_secs(0));
+        durations.push(next_stats_update);
         durations.sort_by(|a,b| a.cmp(b));
     }
 

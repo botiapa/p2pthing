@@ -15,8 +15,11 @@ impl ConnectionManager {
                 return;
             }
         };
+
+        //TODO: Move all this logic to udp_connection.rs
+
         let udp_packet: UdpPacket = bincode::deserialize(&buf).unwrap();
-        conn.read_bytes += bincode::serialized_size(&udp_packet).unwrap();
+        conn.statistics.received_bytes(bincode::serialized_size(&udp_packet).unwrap());
         if conn.received_messages.contains(&udp_packet.msg_id) { // If already received this message
             return;
         }
@@ -33,7 +36,6 @@ impl ConnectionManager {
 
         let msg_type = buf[0];
         let msg_type = num::FromPrimitive::from_u8(msg_type);
-        
 
         match msg_type {
             Some(MsgType::Announce) => {
@@ -95,6 +97,7 @@ impl ConnectionManager {
         let removed = conn.sent_messages.iter_mut().position(|msg| msg.packet.msg_id == id).map(|i| conn.sent_messages.remove(i));
         match removed {
             Some(msg) => {
+                conn.statistics.new_ping(msg.sent.elapsed());
                 match msg.msg_type {
                     MsgType::AnnounceSecret => {
                         conn.upgraded = true;

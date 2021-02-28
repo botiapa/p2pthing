@@ -11,6 +11,8 @@ use crate::common::{debug_message::{DebugMessage, DebugMessageType}, encryption:
 
 use self::{popup::Popup, ui_peer::UIPeer};
 
+use super::udp_connection::statistics::Statistics;
+
 mod events;
 mod blocks;
 mod chat_input;
@@ -40,6 +42,7 @@ pub struct CallStatusHolder {
     public_key: NetworkedPublicKey
 }
 
+//TODO: Clean up this struct
 pub struct Tui {
     cm_s: Option<Sender<InterthreadMessage>>,
     ui_s: Sender<InterthreadMessage>,
@@ -47,7 +50,6 @@ pub struct Tui {
     event_s: Sender<Result<Event, ErrorKind>>,
     event_r: Receiver<Result<Event, ErrorKind>>,
     poll: Poll,
-    waker: Arc<Waker>,
     peers: Vec<UIPeer>,
     contact_list_state: ListState,
     running: Arc<AtomicBool>,
@@ -68,7 +70,10 @@ pub struct Tui {
     own_public_key: Option<NetworkedPublicKey>,
     calls: Vec<CallStatusHolder>,
     next_msg_id: u32,
-    active_popup: Option<Box<dyn Popup>>
+    active_popup: Option<Box<dyn Popup>>,
+    conn_stats: Vec<(NetworkedPublicKey, Statistics)>,
+    /// Whether the debug panel is visible above the chat messages
+    debug_visible: bool
 }
 
 #[derive(FromPrimitive)]
@@ -98,7 +103,6 @@ impl Tui {
             event_s,
             event_r,
             poll,
-            waker,
             peers: vec![],
             contact_list_state: ListState::default(),
             running: Arc::new(AtomicBool::new(true)),
@@ -119,7 +123,9 @@ impl Tui {
             own_public_key: None,
             calls: vec![],
             next_msg_id: 0,
-            active_popup: None
+            active_popup: None,
+            conn_stats: vec![],
+            debug_visible: false
         }
     }
 
@@ -203,8 +209,9 @@ impl Tui {
                         match self.contact_list_state.selected() {
                             Some(_) => {
                                 let main_screen = self.main_screen(main_layout[1]);
-                                self.chat_messages(f, main_screen[0]);
-                                self.chat_input(f, main_screen[1]);
+                                self.peer_stats(f, main_screen[0]);
+                                self.chat_messages(f, main_screen[1]);
+                                self.chat_input(f, main_screen[2]);
                             }
                             None => {} // TODO: Display a friendly message here?
                         }

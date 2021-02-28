@@ -1,6 +1,6 @@
-use std::{io::Stdout};
+use std::{io::Stdout, time::Duration};
 
-use tui::{Frame, backend::CrosstermBackend, layout::{Constraint, Direction, Layout, Rect}, style::{Color, Modifier, Style}, symbols::DOT, text::{Span, Spans, Text}, widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Tabs, Wrap}};
+use tui::{Frame, backend::CrosstermBackend, layout::{Constraint, Direction, Layout, Rect}, style::{Color, Modifier, Style}, symbols::DOT, text::{Span, Spans, Text}, widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Sparkline, Tabs, Wrap}};
 
 use crate::common::message_type::Peer;
 
@@ -149,15 +149,65 @@ impl Tui{
         f.render_stateful_widget(contact_list, area, &mut self.contact_list_state);
     }
 
+    /// This screen contains Peer information, the chat, and chat input in a vertical layout
     pub fn main_screen(&mut self, area: Rect) -> Vec<Rect> {
         Layout::default()
         .direction(Direction::Vertical)
         .margin(0)
         .constraints([
-            Constraint::Max(9999),
-            Constraint::Length(3)
+            Constraint::Length(if self.debug_visible {6} else {0}),
+            Constraint::Max(999),
+            Constraint::Length(3),
         ].as_ref())
         .split(area)
+    }
+
+    pub fn peer_stats(&mut self, f: &mut Frame<CrosstermBackend<Stdout>>, area: Rect) {
+        let selected_contact = self.contact_list_state.selected().unwrap();
+        let p = self.peers.get(selected_contact).unwrap();
+
+        let layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .margin(0)
+        .constraints([
+            Constraint::Length(50),
+            Constraint::Max(999)
+        ].as_ref())
+        .split(area);
+
+        let mut spans: Vec<Spans> = vec![];
+        spans.push(Spans::from(Span::from(format!("{}\n", p.get_public_key().to_string()))));
+        if let Some((_, stats)) = self.conn_stats.iter().find(|(p1, _)| p1 == p.get_public_key()) {
+            spans.push(Spans::from(vec![
+                Span::from("Sent: "),
+                Span::styled(format!("{} bytes\n", stats.get_total_sent().to_string()), Style::default().add_modifier(Modifier::BOLD))
+            ]));
+            spans.push(Spans::from(vec![
+                Span::from("Received: "),
+                Span::styled(format!("{} bytes\n", stats.get_total_received().to_string()), Style::default().add_modifier(Modifier::BOLD))
+            ]));
+            spans.push(Spans::from(vec![
+                Span::from("Sent average: "),
+                Span::styled(format!("{} bytes/s\n", stats.get_avg_sent(Duration::from_secs(5)).to_string()), Style::default().add_modifier(Modifier::BOLD))
+            ]));
+            spans.push(Spans::from(vec![
+                Span::from("Received average: "),
+                Span::styled(format!("{} bytes/s\n", stats.get_avg_received(Duration::from_secs(5)).to_string()), Style::default().add_modifier(Modifier::BOLD))
+            ]));
+            spans.push(Spans::from(vec![
+                Span::from("Last ping: "),
+                Span::styled(format!("{} ms\n", stats.get_last_ping().unwrap_or(&Duration::from_secs(0)).as_millis()), Style::default().add_modifier(Modifier::BOLD))
+            ]));
+        }
+        let stats_paragraph = Paragraph::new(spans).wrap(Wrap{ trim: false});
+        f.render_widget(stats_paragraph, layout[0]);
+
+        //TODO
+        /*let spark_line = Sparkline::default()
+        .data(&[0, 2, 3, 4, 1, 4, 10, 5, 4, 02,3, 2,5, 5, 5,4, 8,3, 5, 5,4])
+        .style(Style::default().fg(Color::White));*/
+
+        f.render_widget(spark_line, layout[1]);
     }
 
     pub fn chat_messages(&mut self, f: &mut Frame<CrosstermBackend<Stdout>>, area: Rect) {

@@ -2,6 +2,8 @@ use std::net::SocketAddr;
 use num_derive::{FromPrimitive, ToPrimitive};
 use serde::{Serialize, Deserialize};
 
+use crate::client::udp_connection::statistics::Statistics;
+
 use super::{debug_message::DebugMessageType, encryption::{NetworkedPublicKey, SymmetricEncryption}};
 pub enum InterthreadMessage {
     SendChatMessage(NetworkedPublicKey, String, u32),
@@ -18,6 +20,7 @@ pub enum InterthreadMessage {
     PacketReadyForResampling(Vec<f32>),
     DebugMessage(String, DebugMessageType),
     ConnectToServer(),
+    ConnectionStatistics(Vec<(NetworkedPublicKey, Statistics)>),
     AudioChangeInputDevice(String),
     AudioChangeOutputDevice(String),
     AudioNewInputDevices(Option<Vec<String>>),

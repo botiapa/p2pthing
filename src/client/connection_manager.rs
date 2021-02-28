@@ -31,6 +31,8 @@ pub const ANNOUNCE_DELAY: Duration = Duration::from_secs(1);
 const RECONNECT_DELAY: Duration = Duration::from_secs(5);
 /// Delay between retrying to send a reliable message
 pub const RELIABLE_MESSAGE_DELAY: Duration = Duration::from_secs(2);
+/// Delay between updating the UI about connection statistics
+pub const STATS_UPDATE_DELAY: Duration = Duration::from_secs(3);
 
 pub struct ConnectionManager {
     rendezvous_socket: TcpStream,
@@ -45,12 +47,16 @@ pub struct ConnectionManager {
     encryption: Rc<AsymmetricEncryption>,
     /// Instant is when the call was sent
     calls_in_progress: Vec<(Call, Instant)>,
-    audio: Audio
+    audio: Audio,
+    // The last instant when the connection statistics were sent to the UI
+    last_stats_update: Instant
 }
 
 pub struct UdpHolder {
     pub packet: UdpPacket,
     pub last_send: Instant,
+    /// The instant when the message was first sent
+    pub sent: Instant,
     pub sock: Rc<UdpSocket>,
     pub address: SocketAddr,
     pub msg_type: MsgType,
@@ -102,6 +108,7 @@ impl ConnectionManager {
             cm_s: cm_s.clone(),
             encryption,
             calls_in_progress: Vec::new(),
+            last_stats_update: Instant::now()
         }
     }
 

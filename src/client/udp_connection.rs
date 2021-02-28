@@ -5,9 +5,11 @@ use serde::Serialize;
 
 use crate::common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption}, message_type::{MsgEncryption, MsgType, UdpPacket}};
 
+use self::statistics::Statistics;
+
 use super::connection_manager::{RELIABLE_MESSAGE_DELAY, KEEP_ALIVE_DELAY_MIDCALL, ANNOUNCE_DELAY, KEEP_ALIVE_DELAY, UdpHolder};
 
-
+pub mod statistics;
 
 #[derive(PartialEq)]
 pub enum UdpConnectionState {
@@ -37,8 +39,7 @@ pub struct UdpConnection {
     /// Is a symmetrically encrypted tunnel created?
     pub upgraded: bool,
     pub encryption: Rc<AsymmetricEncryption>,
-    pub sent_bytes: u64,
-    pub read_bytes: u64
+    pub statistics: Statistics
 }
 
 impl UdpConnection{
@@ -56,8 +57,7 @@ impl UdpConnection{
             received_messages: vec![],
             upgraded: false,
             encryption,
-            sent_bytes: 0,
-            read_bytes: 0,
+            statistics: Statistics::new()
         }
     }
 
@@ -139,6 +139,7 @@ impl UdpConnection{
             self.sent_messages.push(UdpHolder{
                 packet,
                 last_send: Instant::now(),
+                sent: Instant::now(),
                 sock: self.sock.clone(),
                 address: self.address,
                 msg_type,
@@ -147,7 +148,7 @@ impl UdpConnection{
         }
 
         self.sock.send_to(wrapped_data, self.address).unwrap();
-        self.sent_bytes = wrapped_data.len() as u64;
+        self.statistics.sent_bytes(wrapped_data.len() as u64);
         self.last_message_sent = Some(Instant::now());
     }
 
@@ -160,11 +161,7 @@ impl UdpConnection{
         };
         match self.last_message_sent {
             Some(last_message_sent) => {
-                let duration_since = (last_message_sent + delay).checked_duration_since(last_message_sent);
-                match duration_since {
-                    Some(duration) => duration,
-                    None => Duration::from_secs(0)
-                }
+                (last_message_sent + delay).checked_duration_since(last_message_sent).unwrap_or(Duration::from_secs(0))
             } 
             None => Duration::from_secs(0)
         }

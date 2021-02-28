@@ -267,7 +267,7 @@ impl Audio{
                 let decoder = Decoder::new(48000, channels).unwrap();
                 self.decoder = Some(decoder);
 
-                let (out_s, mut out_r) = RingBuffer::<(NetworkedPublicKey, Vec<f32>)>::new(10).split();
+                let (out_s, mut out_r) = RingBuffer::<(NetworkedPublicKey, Vec<f32>)>::new(20).split();
                 self.out_s = Some(out_s);
 
                 let output_samplerate = default_config.sample_rate.0;
@@ -281,7 +281,7 @@ impl Audio{
                 self.output_stream = Some(device.build_output_stream(&default_config, 
                     move |output: &mut [f32], _: &cpal::OutputCallbackInfo| {
                             if !out_r.is_empty() {
-                                let start = Instant::now();
+                                //let start = Instant::now();
                                 let mut queue = HashMap::new();
                                 for (p, samples) in out_r.pop() {
                                     queue.insert(p, samples);
@@ -295,7 +295,7 @@ impl Audio{
                                     }
                                     output[i] = total / queue.values().len() as f32; // Average out the samples
                                 }
-                                println!("Elapsed: {:?}", start.elapsed());
+                                //println!("Elapsed: {:?}", start.elapsed());
                             }
                             else {
                                 for n in output {

@@ -107,6 +107,9 @@ impl Tui {
                     self.settings_outputs = devices;
                     self.settings_outputs_state.select(None); //FIXME
                 },
+                InterthreadMessage::ConnectionStatistics(stats) => {
+                    self.conn_stats = stats;
+                }
                 _ => unreachable!()
             }
         }
@@ -243,6 +246,9 @@ impl Tui {
                     KeyCode::Char('m') | KeyCode::Char('M') if self.active_block != ActiveBlock::ChatInput || (self.active_block == ActiveBlock::ChatInput &&!self.is_active) => {
                         self.muted = !self.muted;
                         self.cm_s.as_ref().unwrap().send(InterthreadMessage::AudioChangeMuteState(self.muted)).unwrap();
+                    }
+                    KeyCode::Char('d') | KeyCode::Char('D') if self.active_block != ActiveBlock::ChatInput || (self.active_block == ActiveBlock::ChatInput &&!self.is_active) => {
+                        self.debug_visible = !self.debug_visible;
                     }
                     KeyCode::F(x) => {
                         match x {
