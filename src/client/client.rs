@@ -1,9 +1,9 @@
 use super::{connection_manager::{ConnectionManager}, tui::Tui};
 
-pub fn start_client() {
+pub fn start_client(ip: String) {
     let mut tui = Tui::new();
 
-    let (cm_s, cm_thr, own_public_key) = ConnectionManager::start("127.0.0.1:42069".to_string(), tui.get_notifier());
+    let (cm_s, cm_thr, own_public_key) = ConnectionManager::start(ip, tui.get_notifier());
     
     tui.main_loop(cm_s.clone(), own_public_key);
 
