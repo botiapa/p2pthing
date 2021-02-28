@@ -1,6 +1,6 @@
 use std::{io::Stdout, time::Duration};
 
-use tui::{Frame, backend::CrosstermBackend, layout::{Constraint, Direction, Layout, Rect}, style::{Color, Modifier, Style}, symbols::DOT, text::{Span, Spans, Text}, widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Sparkline, Tabs, Wrap}};
+use tui::{Frame, backend::CrosstermBackend, layout::{Constraint, Direction, Layout, Rect}, style::{Color, Modifier, Style}, symbols::DOT, text::{Span, Spans, Text}, widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Tabs, Wrap}};
 
 use crate::common::message_type::Peer;
 
@@ -207,7 +207,7 @@ impl Tui{
         .data(&[0, 2, 3, 4, 1, 4, 10, 5, 4, 02,3, 2,5, 5, 5,4, 8,3, 5, 5,4])
         .style(Style::default().fg(Color::White));*/
 
-        f.render_widget(spark_line, layout[1]);
+        //f.render_widget(spark_line, layout[1]);
     }
 
     pub fn chat_messages(&mut self, f: &mut Frame<CrosstermBackend<Stdout>>, area: Rect) {

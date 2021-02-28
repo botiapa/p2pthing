@@ -1,6 +1,5 @@
-use std::{cell::RefMut, io::{self, Write}, net::SocketAddr, rc::Rc};
+use std::{io::{self, Write}};
 
-use mio::net::UdpSocket;
 use serde::Serialize;
 
 use crate::{client::tui::Tui, common::{debug_message::DebugMessageType, encryption::NetworkedPublicKey, message_type::MsgType}};
@@ -35,15 +34,6 @@ impl ConnectionManager {
         let chained: &[u8] = &[&msg_size[..], encrypted].concat()[..];
 
         self.rendezvous_socket.write_all(&chained[..])?;
-        Ok(())
-    }
-
-    pub fn send_udp_message_to<T: ?Sized>(sock: Rc<UdpSocket>, addr: SocketAddr, t: MsgType, msg: &T) -> io::Result<()> where T: Serialize  {
-        let t: u8 = num::ToPrimitive::to_u8(&t).unwrap();
-        let msg = &bincode::serialize(msg).unwrap()[..];
-        let chained: &[u8] = &[&[t], msg].concat()[..];
-
-        sock.send_to(chained, addr)?;
         Ok(())
     }
 

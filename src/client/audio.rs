@@ -1,8 +1,6 @@
-use std::{collections::HashMap, sync::{Arc, Mutex}, time::Instant};
+use std::{collections::HashMap, sync::{Arc, Mutex}};
 
-use channel::unbounded;
 use cpal::{Device, Host, SampleFormat, traits::{DeviceTrait, HostTrait, StreamTrait}};
-use crossbeam::channel::{self, Sender};
 use magnum_opus::{Bitrate, Channels, Decoder, Encoder};
 use mio_misc::channel::Sender as MioSender;
 use ringbuf::{Producer, RingBuffer};

@@ -92,7 +92,7 @@ impl RendezvousServer {
                     let req = CallRequest{
                         caller: caller.clone(),
                         callee: callee.clone(),
-                        time: Instant::now()
+                        _time: Instant::now()
                     };
                     self.calls.push(req);
                     // Don't trust the client

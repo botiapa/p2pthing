@@ -1,5 +1,4 @@
-use core::panic;
-use std::fmt::{Display};
+use std::fmt::Display;
 
 use aes_gcm_siv::Aes256GcmSiv; // Or `Aes128GcmSiv`
 use aes_gcm_siv::aead::{Aead, NewAead, generic_array::GenericArray};

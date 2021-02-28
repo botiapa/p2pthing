@@ -108,8 +108,6 @@ pub mod msg_types {
 
     use serde::{Serialize, Deserialize};
     use crate::common::encryption::NetworkedPublicKey;
-
-    use super::Peer;
     
     /// The server announced itself to the client, requesting an announcement.
     #[derive(Serialize, Deserialize)]

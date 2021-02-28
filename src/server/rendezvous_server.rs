@@ -12,7 +12,7 @@ mod udp_message;
 struct CallRequest {
     caller: Peer,
     callee: Peer,
-    time: Instant
+    _time: Instant //TODO: Implement me
 }
 
 pub struct RendezvousServer {

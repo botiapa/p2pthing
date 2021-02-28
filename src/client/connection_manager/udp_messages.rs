@@ -124,9 +124,6 @@ impl ConnectionManager {
 
     fn on_keep_alive(&mut self, addr: SocketAddr) {
         Tui::debug_message(&format!("Keep alive message received from {}", addr), DebugMessageType::Log, &self.ui_s);
-        let conn = self.udp_connections.iter_mut()
-        .find(|x| x.address == addr).unwrap();
-        
         self.check_punchthrough(addr);
     }
 
