@@ -1,4 +1,4 @@
-use std::{collections::HashMap, net::SocketAddr, str::FromStr, time::{Instant}};
+use std::{collections::HashMap, env, net::SocketAddr, str::FromStr, time::{Instant}};
 //use scrap;
 use mio::{Interest, Poll, Token, net::UdpSocket};
 use mio::net::{TcpListener, TcpStream};
@@ -37,11 +37,19 @@ impl RendezvousServer {
         let poll = Poll::new().unwrap();
         let mut next_token = 0;
 
-        let mut tcp_listener = TcpListener::bind(SocketAddr::from_str("0.0.0.0:42069").unwrap()).unwrap();
+        let port = match env::vars().find(|(k, _)| k == "PORT") {
+            Some((_, v)) => v.parse::<i32>().unwrap(),
+            None => 42069
+        };
+        println!("Starting server with PORT: {}", port);
+
+        let ip = &format!("0.0.0.0:{}", port);
+
+        let mut tcp_listener = TcpListener::bind(SocketAddr::from_str(ip).unwrap()).unwrap();
         poll.registry().register(&mut tcp_listener, Token(next_token), Interest::READABLE).unwrap();
         next_token += 1;
         
-        let mut udp_listener = UdpSocket::bind(SocketAddr::from_str("0.0.0.0:42069").unwrap()).unwrap();
+        let mut udp_listener = UdpSocket::bind(SocketAddr::from_str(ip).unwrap()).unwrap();
         poll.registry().register(&mut udp_listener, Token(next_token), Interest::READABLE).unwrap();
         next_token += 1;
         
