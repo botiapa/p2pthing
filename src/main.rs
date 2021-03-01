@@ -13,8 +13,15 @@ use std::env;
 pub fn main() {
     let args: Vec::<String> = env::args().collect();
     match args.len() {
-        1 | 2 if cfg!(feature = "client") && args[1].starts_with("c") => {
+        1 if cfg!(feature = "client") => {
             println!("No argument found, assuming client role.");
+            init_client(None);
+        }
+        1 if cfg!(feature = "server") => {
+            println!("No argument found, assuming server role.");
+            init_server();
+        }
+        1 | 2 if cfg!(feature = "client") && args[1].starts_with("c") => {
             init_client(None);
         }
         1 | 2 if !cfg!(feature = "client") && args[1].starts_with("c") => {

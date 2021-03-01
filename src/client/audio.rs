@@ -190,7 +190,10 @@ impl Audio{
                 };
 
                 let mut encoder = Encoder::new(48000, channels, magnum_opus::Application::Voip).unwrap();
-                encoder.set_bitrate(bitrate).unwrap();
+                encoder.set_inband_fec(true).unwrap();
+                //encoder.set_packet_loss_perc(50).unwrap();
+                encoder.set_vbr(true).unwrap();
+                //encoder.set_bitrate(bitrate).unwrap();
 
                 let encoder = Arc::new(Mutex::new(Some(encoder)));
                 self.encoder = Arc::clone(&encoder);

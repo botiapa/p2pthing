@@ -8,7 +8,7 @@ edition = "2018"
 
 [features]
 
-default = ["server", "client", "audio"] #MODIFYME WHEN IN PRODUCTION
+default = ["client", "audio"] #MODIFYME WHEN IN PRODUCTION
 
 server = []
 client = ["crossterm", "tui", "textwrap", "ringbuf"]

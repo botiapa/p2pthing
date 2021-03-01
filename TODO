@@ -39,6 +39,7 @@ from and to the rendezvous server
     - Last X seconds average data received
     - Last X seconds average data sent
     - Ping
+- Move InterthreadMessages to client only
 
 ARCHITECTURE
 -----------
