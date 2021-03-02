@@ -62,7 +62,10 @@ pub struct Tui {
     settings_outputs: Option<Vec<String>>,
     settings_outputs_state: ListState,
     settings_kbits_state: ListState,
+    /// Is audio recording mute on
     muted: bool,
+    /// Is the denoiser on
+    denoiser: bool,
     selected_tab: usize,
     tab_titles: Vec<String>,
     active_block: ActiveBlock,
@@ -116,6 +119,7 @@ impl Tui {
             settings_outputs_state: ListState::default(),
             settings_kbits_state: ListState::default(),
             muted: true,
+            denoiser: true,
             selected_tab: 0,
             tab_titles: vec!["Main".into(), "Settings".into(), "Debug".into()],
             active_block: ActiveBlock::ContactList,

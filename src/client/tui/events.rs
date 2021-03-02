@@ -250,6 +250,10 @@ impl Tui {
                     KeyCode::Char('d') | KeyCode::Char('D') if self.active_block != ActiveBlock::ChatInput || (self.active_block == ActiveBlock::ChatInput &&!self.is_active) => {
                         self.debug_visible = !self.debug_visible;
                     }
+                    KeyCode::Char('n') | KeyCode::Char('N') if self.active_block != ActiveBlock::ChatInput || (self.active_block == ActiveBlock::ChatInput &&!self.is_active) => {
+                        self.denoiser = !self.denoiser;
+                        self.cm_s.as_ref().unwrap().send(InterthreadMessage::AudioChangeDenoiserState(self.denoiser)).unwrap();
+                    }
                     KeyCode::F(x) => {
                         match x {
                             x if (x as usize) < self.tab_titles.len() + 1 => {

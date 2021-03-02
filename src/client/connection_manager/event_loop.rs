@@ -116,7 +116,7 @@ impl ConnectionManager {
                                 }
                             }
                         }
-                        InterthreadMessage::PacketReadyForResampling(data) => self.audio.resample_and_send_packet(data),
+                        InterthreadMessage::AudioDataReadyToBeProcessed(data) => self.audio.process_and_send_packet(data),
                         InterthreadMessage::OnChatMessage(p, msg) => Tui::on_chat_message(&self.ui_s, p, msg),
                         InterthreadMessage::ConnectToServer() => {
                             self.rendezvous_socket = TcpStream::connect(self.rendezvous_ip).unwrap();
@@ -184,6 +184,7 @@ impl ConnectionManager {
                         InterthreadMessage::AudioChangeOutputDevice(d) => self.audio.change_output_device(d),
                         InterthreadMessage::AudioChangePreferredKbits(kbits) => self.audio.change_preferred_kbits(kbits),
                         InterthreadMessage::AudioChangeMuteState(muted) => self.audio.change_mute_state(muted),
+                        InterthreadMessage::AudioChangeDenoiserState(denoiser_state) => self.audio.change_denoiser_state(denoiser_state),
                         InterthreadMessage::Quit() => {
                             match self.rendezvous_socket.shutdown(Shutdown::Both) {
                                 _ => {}

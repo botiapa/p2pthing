@@ -18,7 +18,7 @@ pub enum InterthreadMessage {
     PeerDisconnected(NetworkedPublicKey),
     Call(NetworkedPublicKey),
     OpusPacketReady(Vec<u8>),
-    PacketReadyForResampling(Vec<f32>),
+    AudioDataReadyToBeProcessed(Vec<f32>),
     DebugMessage(String, DebugMessageType),
     ConnectToServer(),
     #[cfg(feature = "client")]
@@ -29,6 +29,7 @@ pub enum InterthreadMessage {
     AudioNewOutputDevices(Option<Vec<String>>),
     AudioChangePreferredKbits(i32),
     AudioChangeMuteState(bool),
+    AudioChangeDenoiserState(bool),
     WakeUp,
 }
 

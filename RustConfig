@@ -1,1 +1,0 @@
-RUST_CARGO_BUILD_FLAGS="--release --no-default-features --features server"

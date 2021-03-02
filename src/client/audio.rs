@@ -1,8 +1,9 @@
-use std::{collections::HashMap, sync::{Arc, Mutex}};
+use std::{collections::HashMap};
 
 use cpal::{Device, Host, SampleFormat, traits::{DeviceTrait, HostTrait, StreamTrait}};
 use magnum_opus::{Bitrate, Channels, Decoder, Encoder};
 use mio_misc::channel::Sender as MioSender;
+use nnnoiseless::DenoiseState;
 use ringbuf::{Producer, RingBuffer};
 use rubato::{FftFixedIn, InterpolationParameters, InterpolationType, Resampler, SincFixedIn, WindowFunction};
 
@@ -17,8 +18,9 @@ pub struct Audio {
     cm_s: MioSender<InterthreadMessage>,
     input_stream: Option<cpal::Stream>,
     output_stream: Option<cpal::Stream>,
-    encoder: Arc<Mutex<Option<Encoder>>>,
+    encoder: Option<Encoder>,
     decoder: Option<Decoder>,
+    denoiser: Option<(Box<DenoiseState<'static>>, Box<DenoiseState<'static>>)>,
     muted: bool,
     input_resampler: Option<FftFixedIn<f32>>,
     input_channels: Option<usize>,
@@ -38,7 +40,7 @@ impl Audio{
             cm_s,
             input_stream: None,
             output_stream: None,
-            encoder: Arc::new(Mutex::new(None)),
+            encoder: None,
             decoder: None,
             muted: true,
             input_resampler: None,
@@ -49,6 +51,7 @@ impl Audio{
             preferred_input_device: None,
             preferred_output_device: None,
             started: false,
+            denoiser: None,
         }
     }
 
@@ -99,6 +102,17 @@ impl Audio{
         }
     }
 
+    pub fn change_denoiser_state(&mut self, denoiser_state: bool) {
+        if denoiser_state && self.denoiser.is_some() {return;}
+        else {
+            self.denoiser = match denoiser_state {
+                true => Some((DenoiseState::new(), DenoiseState::new())),
+                false => None
+            }
+        }
+        
+    }
+
     pub fn update_input_devices(&mut self) {
         match self.host.input_devices() {
             Ok(devices) => {
@@ -131,28 +145,98 @@ impl Audio{
         }
     }
 
-    pub fn resample_and_send_packet(&mut self, packet: Vec<f32>) {
-        let mut split = [Vec::with_capacity(packet.len()/2), Vec::with_capacity(packet.len()/2)];
-        for ch in packet.chunks_exact(self.input_channels.unwrap()) {
+    /// Resample the interleaved data with the provided resampler
+    pub fn resample(resampler: &mut dyn Resampler<f32>, input: &[f32], ch_nmb: usize) -> Vec<f32> {
+        let mut split = [Vec::with_capacity(input.len()/2), Vec::with_capacity(input.len()/2)];
+
+        // Split the two channels
+        for ch in input.chunks_exact(ch_nmb) {
             split[0].push(ch[0]);
-            match self.input_channels.unwrap() {
+            match ch_nmb {
                 1 => split[1].push(ch[0]),
                 2 => split[1].push(ch[1]),
                 n => panic!("Invalid channel size: {}", n)
             }
         }
         
-        let mut resampled = self.input_resampler.as_mut().unwrap().process(&split[..]).unwrap();
+        let mut resampled = resampler.process(&split[..]).unwrap();
         let f_ch = resampled.pop().unwrap();
         let s_ch = resampled.pop().unwrap();
 
-        let resampled = f_ch.into_iter().interleave(s_ch.into_iter()).collect::<Vec<f32>>();
+        f_ch.into_iter().interleave(s_ch.into_iter()).collect::<Vec<f32>>()
+    }
+
+    /// Apply denoising
+    pub fn denoise(denoiser: &mut (Box<DenoiseState>, Box<DenoiseState>), input: &mut [f32], ch_nmb: usize) -> Vec<f32> {
+        assert_eq!(input.len() % DenoiseState::FRAME_SIZE, 0, "Not optional input size in denoiser: input: {}  denoiser_frame_size: {}", input.len(), DenoiseState::FRAME_SIZE);
+
+        // Convert from f32 to i16
+        for n in input.iter_mut() {
+            *n = match *n {
+                n if n > 1.0f32 => i16::MAX as f32,
+                n if n < -1.0f32 => i16::MIN as f32,
+                _ => *n * i16::MAX as f32
+            };
+        }
+
+        // Split the two channels
+        let mut split = [Vec::with_capacity(input.len()/2), Vec::with_capacity(input.len()/2)];
+        for ch in input.chunks_exact(ch_nmb) {
+            split[0].push(ch[0]);
+            match ch_nmb {
+                1 => split[1].push(ch[0]),
+                2 => split[1].push(ch[1]),
+                n => panic!("Invalid channel size: {}", n)
+            }
+        }
+        
+        let (d1, d2) = denoiser;
+
+        let mut output = Vec::with_capacity(input.len()/2);
+        let mut out_buf = [0.0f32; DenoiseState::FRAME_SIZE];
+        for chunk in split[0].chunks_exact(DenoiseState::FRAME_SIZE) {
+            d1.process_frame(&mut out_buf, chunk);
+            output.extend_from_slice(&out_buf[..]);
+        }
+        split[0] = output;
+
+        let mut output = Vec::with_capacity(input.len()/2);
+        let mut out_buf = [0.0f32; DenoiseState::FRAME_SIZE];
+        for chunk in split[1].chunks_exact(DenoiseState::FRAME_SIZE) {
+            d2.process_frame(&mut out_buf, chunk);
+            output.extend_from_slice(&out_buf[..]);
+        }
+        split[1] = output;
+
+        let f_ch = split[0].clone();
+        let s_ch = split[1].clone();
+
+        let mut output = f_ch.into_iter().interleave(s_ch.into_iter()).collect::<Vec<f32>>();
+
+        // Convert back from i16 to f32
+        for n in &mut output {
+            *n = *n / i16::MAX as f32;
+        }
+        output
+    }
+
+    pub fn process_and_send_packet(&mut self, packet: Vec<f32>) {
+        let mut resampled = match &mut self.input_resampler {
+            Some(resampler) => {
+                Audio::resample(resampler, &packet[..], self.input_channels.unwrap())
+            }
+            None => packet
+        };
+
+        let denoised = match &mut self.denoiser {
+            Some(denoiser) => Audio::denoise(denoiser, &mut resampled[..], self.input_channels.unwrap()),
+            None => resampled
+        };
 
         let mut output = [0u8; 2000];
-        let mut lock = self.encoder.lock();
-        let encoder = lock.as_mut().unwrap().as_mut().unwrap();
-        let sent = encoder.encode_float(&resampled[..], &mut output).unwrap();
-
+        let encoder = self.encoder.as_mut().unwrap();
+        let sent = encoder.encode_float(&denoised[..], &mut output).unwrap();
+        
         self.cm_s.send(InterthreadMessage::OpusPacketReady(output[..sent].to_vec())).unwrap();
     }
 
@@ -190,13 +274,12 @@ impl Audio{
                 };
 
                 let mut encoder = Encoder::new(48000, channels, magnum_opus::Application::Voip).unwrap();
-                encoder.set_inband_fec(true).unwrap();
-                //encoder.set_packet_loss_perc(50).unwrap();
                 encoder.set_vbr(true).unwrap();
-                //encoder.set_bitrate(bitrate).unwrap();
+                encoder.set_bitrate(bitrate).unwrap();
 
-                let encoder = Arc::new(Mutex::new(Some(encoder)));
-                self.encoder = Arc::clone(&encoder);
+                self.encoder = Some(encoder);
+
+                self.denoiser = Some((DenoiseState::new(), DenoiseState::new()));
 
                 let sample_rate = default_config.sample_rate.0;
                 if sample_rate != 48000 {
@@ -214,19 +297,7 @@ impl Audio{
                     SampleFormat::F32 => 
                         device.build_input_stream(&default_config,
                 move |data: &[f32], _: &_| {
-                                //let max = data.iter().fold(0.0f32, |max, &val| if val > max{ val } else{ max });
-                                //println!("Max: {}", max);
-                                if sample_rate == 48000 {
-                                    let mut output = [0u8; 2000];
-                                    let mut lock = encoder.lock();
-                                    let encoder = lock.as_mut().unwrap().as_mut().unwrap();
-                                    let sent = encoder.encode_float(data, &mut output).unwrap();
-    
-                                    cm_s.send(InterthreadMessage::OpusPacketReady(output[0..sent].to_vec())).unwrap();
-                                }
-                                else {
-                                    cm_s.send(InterthreadMessage::PacketReadyForResampling(data.to_vec())).unwrap();
-                                }
+                                cm_s.send(InterthreadMessage::AudioDataReadyToBeProcessed(data.to_vec())).unwrap();
                             },
                             move |err| {
                                 Tui::debug_message(&format!("Read error from input err: {}", err), DebugMessageType::Error, &ui_s);
@@ -282,7 +353,6 @@ impl Audio{
                 self.output_stream = Some(device.build_output_stream(&default_config, 
                     move |output: &mut [f32], _: &cpal::OutputCallbackInfo| {
                             if !out_r.is_empty() {
-                                //let start = Instant::now();
                                 let mut queue = HashMap::new();
                                 for (p, samples) in out_r.pop() {
                                     queue.insert(p, samples);
@@ -296,7 +366,6 @@ impl Audio{
                                     }
                                     output[i] = total / queue.values().len() as f32; // Average out the samples
                                 }
-                                //println!("Elapsed: {:?}", start.elapsed());
                             }
                             else {
                                 for n in output {
@@ -354,34 +423,18 @@ impl Audio{
             Channels::Stereo => 2
         };
 
-        let mut out = [0f32; 5760*2];
+        let mut out = [0f32; 960]; // Was 5760*2
         let read = decoder.decode_float(&data, &mut out, false).unwrap(); // reads 480 samples per channel
 
         let buf = self.out_s.as_mut().unwrap();
-        match self.output_resampler.as_mut() {
-            Some(resampler) => {
-                let mut split = [Vec::with_capacity(read), Vec::with_capacity(read)];
-                for ch in out[..read*num_channels].chunks_exact(num_channels) {
-                    split[0].push(ch[0]);
-                    match channels {
-                        Channels::Mono => split[1].push(ch[0]),
-                        Channels::Stereo => split[1].push(ch[1])
-                    }
-                }
-                let mut resampled = resampler.process(&split).unwrap();
-                let f_ch = resampled.pop().unwrap();
-                let s_ch = resampled.pop().unwrap();
 
-                let resampled = f_ch.into_iter().interleave(s_ch.into_iter()).collect::<Vec<f32>>();
-                if buf.push((peer, resampled)).is_err() {
-                    panic!("Couldn't push new sample to ringbuffer (It's probably full)");
-                }
-            }
-            None => {
-                if buf.push((peer, out[..read*2].to_vec())).is_err() {
-                    panic!("Couldn't push new sample to ringbuffer (It's probably full)");
-                }
-            }
+        // Resample if needed
+        let resampled = match self.output_resampler.as_mut() {
+            Some(resampler) => Audio::resample(resampler, &out[..read*num_channels], num_channels),
+            None => out[..read*num_channels].to_vec()
+        };
+        if buf.push((peer, resampled)).is_err() {
+            panic!("Couldn't push new sample to ringbuffer (It's probably full)");
         }
     }
 }

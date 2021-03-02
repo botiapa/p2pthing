@@ -35,8 +35,8 @@ impl Tui{
         .direction(Direction::Horizontal)
         .margin(0)
         .constraints([
-            Constraint::Percentage(95),
-            Constraint::Percentage(5)
+            Constraint::Min(10),
+            Constraint::Length(5)
         ].as_ref())
         .split(area)
     }
@@ -132,11 +132,17 @@ impl Tui{
     }
 
     pub fn status_icons(&mut self, f: &mut Frame<CrosstermBackend<Stdout>>, area: Rect) {
-        let mute_icon = match self.muted{
-            true => Span::styled("M", Style::default().fg(Color::Red)),
-            false => Span::styled("R", Style::default().fg(Color::Green))
-        };
-        let icons = Paragraph::new(mute_icon).block(Block::default().borders(Borders::ALL));
+        let spans = vec![
+            match self.muted{ // MUTED / RECORDING
+                true => Span::styled("M ", Style::default().fg(Color::Red)),
+                false => Span::styled("R ", Style::default().fg(Color::Green))
+            },
+            match self.denoiser{ // DENOISER ON / OFF
+                true => Span::styled("D ", Style::default().fg(Color::Green)),
+                false => Span::styled("D ", Style::default().fg(Color::Red))
+            }
+        ];
+        let icons = Paragraph::new(Spans::from(spans)).block(Block::default().borders(Borders::ALL));
         f.render_widget(icons, area);
     }
 

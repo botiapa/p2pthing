@@ -1,10 +1,12 @@
 [package]
 name = "p2pthing"
-version = "0.1.0"
+version = "0.6.0"
 authors = ["KillSwitch"]
 edition = "2018"
+readme = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+# TODO: Organize dependencies better
 
 [features]
 
@@ -12,8 +14,8 @@ default = ["server"]
 
 server = []
 client = ["crossterm", "tui", "textwrap", "ringbuf"]
-audio = ["cpal", "magnum-opus", "rubato"]
-win = ["dxgcap"]
+audio = ["cpal", "magnum-opus", "rubato", "nnnoiseless"]
+#win = ["dxgcap"]
 
 [dependencies]
 rgb2yuv420 = "0.2.3"
@@ -37,12 +39,16 @@ crossbeam = "0.8.0"
 mio-misc = "1.0.0"
 itertools = "0.10.0"
 
-dxgcap = { version = "0.2.4", optional = true }
+### TUI
+#dxgcap = { version = "0.2.4", optional = true }
 crossterm = { version = "0.19", optional = true }
 tui = { version = "0.14.0", default-features = false, features = ['crossterm'], optional = true }
 textwrap = { version = "0.13", optional = true }
 
+### AUDIO
+
 cpal = { version =  "0.13.1", optional = true }
-magnum-opus  = { version =  "0.3.2", optional = true }
+magnum-opus  = { path = "magnum-opus", optional = true }
 rubato = { version = "0.7.0", optional = true}
 ringbuf = {version = "0.2.3", optional = true }
+nnnoiseless = {version = "0.3.2", optional = true}

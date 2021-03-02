@@ -14,7 +14,7 @@ pub struct AsymmetricEncryption{
 
 impl AsymmetricEncryption {
     pub fn new() -> AsymmetricEncryption {
-        let bits = 1024; // FIXME: Set this to a sane amount once in 'production'
+        let bits = 4096;
         let secret_key = RSAPrivateKey::new(&mut OsRng, bits).expect("Failed to generate a key");
         let public_key = RSAPublicKey::from(&secret_key);
 
