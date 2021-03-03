@@ -207,13 +207,6 @@ impl Tui{
         }
         let stats_paragraph = Paragraph::new(spans).wrap(Wrap{ trim: false});
         f.render_widget(stats_paragraph, layout[0]);
-
-        //TODO
-        /*let spark_line = Sparkline::default()
-        .data(&[0, 2, 3, 4, 1, 4, 10, 5, 4, 02,3, 2,5, 5, 5,4, 8,3, 5, 5,4])
-        .style(Style::default().fg(Color::White));*/
-
-        //f.render_widget(spark_line, layout[1]);
     }
 
     pub fn chat_messages(&mut self, f: &mut Frame<CrosstermBackend<Stdout>>, area: Rect) {

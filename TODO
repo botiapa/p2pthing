@@ -32,13 +32,6 @@ TODO
 - Send udp announce after disconnecting and reconnecting 
 from and to the rendezvous server
 - Prepare the ringbuffer for unlimited connections
-- Move the chat downards to make space for statistics/peer
-- Statistics
-    - Total sent data
-    - Total received data
-    - Last X seconds average data received
-    - Last X seconds average data sent
-    - Ping
 - Move InterthreadMessages to client only
 - Reorganize dependencies
 

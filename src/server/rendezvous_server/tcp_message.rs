@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, time::Instant};
+use std::{net::SocketAddr};
 
 use msg_types::{AnnouncePublic, AnnounceSecret, CallResponse};
 use mio::Token;
@@ -92,7 +92,6 @@ impl RendezvousServer {
                     let req = CallRequest{
                         caller: caller.clone(),
                         callee: callee.clone(),
-                        _time: Instant::now()
                     };
                     self.calls.push(req);
                     // Don't trust the client

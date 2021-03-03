@@ -339,7 +339,7 @@ impl Audio{
                 let decoder = Decoder::new(48000, channels).unwrap();
                 self.decoder = Some(decoder);
 
-                let (out_s, mut out_r) = RingBuffer::<(NetworkedPublicKey, Vec<f32>)>::new(20).split();
+                let (out_s, mut out_r) = RingBuffer::<(NetworkedPublicKey, Vec<f32>)>::new(100).split(); // Need a larger capacity due to how UDP packets are sent through the network
                 self.out_s = Some(out_s);
 
                 let output_samplerate = default_config.sample_rate.0;
@@ -434,7 +434,7 @@ impl Audio{
             None => out[..read*num_channels].to_vec()
         };
         if buf.push((peer, resampled)).is_err() {
-            panic!("Couldn't push new sample to ringbuffer (It's probably full)");
+            Tui::debug_message("Couldn't push new sample to ringbuffer (It's probably full)", DebugMessageType::Error, &self.ui_s);
         }
     }
 }

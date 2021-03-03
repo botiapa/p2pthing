@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, net::SocketAddr, str::FromStr, time::{Instant}};
+use std::{collections::HashMap, env, net::SocketAddr, str::FromStr};
 //use scrap;
 use mio::{Interest, Poll, Token, net::UdpSocket};
 use mio::net::{TcpListener, TcpStream};
@@ -11,8 +11,7 @@ mod udp_message;
 
 struct CallRequest {
     caller: Peer,
-    callee: Peer,
-    _time: Instant //TODO: Implement me
+    callee: Peer
 }
 
 pub struct RendezvousServer {
