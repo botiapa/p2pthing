@@ -21,7 +21,7 @@
     - Linux - I'll do my best to support linux
     - Mac - No idea, don't have one, altough probably could work
 
-## Planned Features
+## Features that could be implemented
 - Screen sharing
     - Probably with ffmpeg
         - DXGI on windows
