@@ -5,7 +5,7 @@
 
 ## Usage
 
-- Build or download a built binary
+- Download a built binary
 - Or build it yourself:
   - Run the rendezvous server: ```cargo run --release s```
   - Run the client(s): ```cargo run --release --features client,audio c```
