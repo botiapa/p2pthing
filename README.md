@@ -3,6 +3,15 @@
 
 ![Screenshot](/tui_screenshot.png?raw=true)
 
+## Usage
+
+- Build or download a built binary
+- Or build it yourself:
+  - Run the rendezvous server: ```cargo run --release s```
+  - Run the client(s): ```cargo run --release --features client,audio c```
+
+By default the client will try to connect to ```127.0.0.1:42069```. However if you want to specify the IP, then run the client like this: ```cargo run --release --features client,audio c 192.168.10.30:42069```, where ```192.168.10.30``` is the ip and ```42069``` is the port obviously.
+
 ## Implemented Features
 - Multi peer chat
 - UDP Punchthrough
