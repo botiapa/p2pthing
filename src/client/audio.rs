@@ -1,4 +1,4 @@
-use std::{collections::HashMap};
+use std::collections::HashMap;
 
 use cpal::{Device, Host, SampleFormat, traits::{DeviceTrait, HostTrait, StreamTrait}};
 use magnum_opus::{Bitrate, Channels, Decoder, Encoder};
@@ -282,13 +282,13 @@ impl Audio{
                 self.denoiser = Some((DenoiseState::new(), DenoiseState::new()));
 
                 let sample_rate = default_config.sample_rate.0;
+                self.input_channels = Some(channels as usize);
                 if sample_rate != 48000 {
                     self.input_resampler = Some(Audio::get_resampler_new(
                         sample_rate as usize, 
                         48000, 
                         channels as usize, 
                         sample_rate as usize / 50 as usize / channels as usize));
-                    self.input_channels = Some(channels as usize);
                 }
 
                 self.input_stream = Some(match supported_default_config.sample_format() {

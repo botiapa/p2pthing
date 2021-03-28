@@ -1,4 +1,3 @@
-use core::panic;
 use std::{sync::{atomic::Ordering, mpsc::TryRecvError}, thread};
 
 use chrono::Utc;
