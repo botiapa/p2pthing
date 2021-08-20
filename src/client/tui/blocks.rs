@@ -2,9 +2,9 @@ use std::{io::Stdout, time::Duration};
 
 use tui::{Frame, backend::CrosstermBackend, layout::{Constraint, Direction, Layout, Rect}, style::{Color, Modifier, Style}, symbols::DOT, text::{Span, Spans, Text}, widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Tabs, Wrap}};
 
-use crate::common::message_type::Peer;
+use crate::{client::ui::{CHOOSABLE_KBITS, CallStatus}, common::message_type::Peer};
 
-use super::{ActiveBlock, CHOOSABLE_KBITS, CallStatus, Tui};
+use super::{ActiveBlock, Tui};
 
 impl Tui{
     fn get_fg_color(&mut self, block: ActiveBlock) -> Color {
@@ -288,7 +288,7 @@ impl Tui{
         let debug_message_list = List::new(self.debug_messages.iter()
         .map(|p| ListItem::new(Text::from(p.to_string()))
         .style(match p.msg_type {
-            super::DebugMessageType::Log => Style::default().fg(Color::White),
+            super::DebugMessageType::Info => Style::default().fg(Color::White),
             super::DebugMessageType::Warning => Style::default().fg(Color::Yellow),
             super::DebugMessageType::Error => Style::default().fg(Color::Red)
         }))

@@ -4,9 +4,9 @@ use chrono::Utc;
 use crossterm::event::{Event, KeyCode, KeyModifiers, read};
 use num::FromPrimitive;
 
-use super::{ActiveBlock, CHOOSABLE_KBITS, CallStatus, CallStatusHolder, DebugMessageType, TabIndex, Tui, popup::PopupReturn, ui_peer::{ChatMessage, UIPeer}};
+use super::{ActiveBlock, CallStatusHolder, DebugMessageType, TabIndex, Tui, popup::PopupReturn, ui_peer::{ChatMessage, UIPeer}};
 use super::super::connection_manager::ConnectionManager;
-use crate::common::message_type::{*, Peer};
+use crate::{client::ui::{CHOOSABLE_KBITS, CallStatus}, common::message_type::{*, Peer}};
 use super::popup::call_popup::CallPopup;
 
 impl Tui {

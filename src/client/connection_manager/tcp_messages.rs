@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 use msg_types::{AnnounceRequest, AnnounceSecret, CallResponse, Disconnect};
 use mio::Token;
 
-use crate::{client::tui::Tui, common::{debug_message::DebugMessageType, encryption::SymmetricEncryption, lib::read_exact, message_type::{InterthreadMessage, MsgType, msg_types::{self, Call}, Peer}}};
+use crate::{client::ui::UIConn, common::{encryption::SymmetricEncryption, lib::read_exact, message_type::{InterthreadMessage, MsgType, msg_types::{self, Call}, Peer}}};
 
 use super::{ConnectionManager, UdpConnection, UdpConnectionState};
 
@@ -108,9 +108,8 @@ impl ConnectionManager {
             let sym_key = SymmetricEncryption::new();
             let mut conn = UdpConnection::new(UdpConnectionState::MidCall, udp_address, self.udp_socket.clone(), Some(sym_key), self.encryption.clone());
             conn.associated_peer = Some(call.callee.clone());
-            Tui::debug_message(
-            &format!("A sent call has been accepted by peer ({};{}), starting the punch through protocol", call.callee, conn.address),
-        DebugMessageType::Log, &self.ui_s);
+            self.ui_s.log_info(
+            &format!("A sent call has been accepted by peer ({};{}), starting the punch through protocol", call.callee, conn.address));
 
             conn.send_udp_message_with_public_key(MsgType::AnnounceSecret, &AnnounceSecret{secret: conn.symmetric_key.as_ref().unwrap().secret.clone()}, true, None).unwrap();
 
@@ -121,7 +120,7 @@ impl ConnectionManager {
 
     fn on_disconnect(&mut self, _: SocketAddr, disconnect_peer: Disconnect) {
         let p = self.peers.iter_mut().find(|p| p.public_key == disconnect_peer.public_key).unwrap();
-        Tui::debug_message(&format!("Peer ({}) disconnected", p.public_key),DebugMessageType::Log, &self.ui_s);
+        self.ui_s.log_info(&format!("Peer ({}) disconnected", p.public_key));
         match p.udp_addr {
             Some(addr) => {
                 self.udp_connections.iter_mut()

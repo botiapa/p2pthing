@@ -7,10 +7,8 @@ use mio_misc::channel::Sender as MioSender;
 use ringbuf::{Producer, RingBuffer};
 use rubato::{FftFixedIn, InterpolationParameters, InterpolationType, Resampler, SincFixedIn, WindowFunction};
 
-use crate::common::{debug_message::DebugMessageType, encryption::NetworkedPublicKey, message_type::InterthreadMessage};
+use crate::{client::ui::UIConn, common::{encryption::NetworkedPublicKey, message_type::InterthreadMessage}};
 use itertools::Itertools;
-
-use super::tui::Tui;
 
 pub struct Audio {
     host: Host,
@@ -124,7 +122,7 @@ impl Audio{
             },
             Err(err) => {
                 self.ui_s.send(InterthreadMessage::AudioNewInputDevices(None)).unwrap();
-                Tui::debug_message(&format!("Error getting input devices: {}", err), DebugMessageType::Warning, &self.ui_s);
+                self.ui_s.log_warning(&format!("Error getting input devices: {}", err));
             }
         }
     }
@@ -140,7 +138,7 @@ impl Audio{
             },
             Err(err) => {
                 self.ui_s.send(InterthreadMessage::AudioNewOutputDevices(None)).unwrap();
-                Tui::debug_message(&format!("Error getting output devices: {}", err), DebugMessageType::Warning, &self.ui_s);
+                self.ui_s.log_warning(&format!("Error getting output devices: {}", err));
             }
         }
     }
@@ -249,7 +247,7 @@ impl Audio{
                 match default_input {
                     Some(d) => d,
                     None => {
-                        Tui::debug_message("Cannot find default input device", DebugMessageType::Error, &self.ui_s);
+                        self.ui_s.log_error("Cannot find default input device");
                         return;
                     }
                 }
@@ -301,14 +299,14 @@ impl Audio{
                                 cm_s.send(InterthreadMessage::AudioDataReadyToBeProcessed(data.to_vec())).unwrap();
                             },
                             move |err| {
-                                Tui::debug_message(&format!("Read error from input err: {}", err), DebugMessageType::Error, &ui_s);
+                                ui_s.log_error(&format!("Read error from input err: {}", err));
                             },
                         ).unwrap(),
                 });
                 self.input_stream.as_ref().unwrap().play().unwrap();
-                Tui::debug_message(&format!("Recording started: device: {} sample_rate: {} channels: {}", device.name().unwrap(), default_config.sample_rate.0, default_config.channels), DebugMessageType::Log, &self.ui_s);
+                self.ui_s.log_info(&format!("Recording started: device: {} sample_rate: {} channels: {}", device.name().unwrap(), default_config.sample_rate.0, default_config.channels));
             }
-            Err(err) => Tui::debug_message(&format!("Cannot find config for default input device err: {}", err), DebugMessageType::Error, &self.ui_s)
+            Err(err) => self.ui_s.log_info(&format!("Cannot find config for default input device err: {}", err))
         }
    
     }
@@ -321,7 +319,7 @@ impl Audio{
                 match default_output {
                     Some(d) => d,
                     None => {
-                        Tui::debug_message("Cannot find default output device", DebugMessageType::Error, &self.ui_s);
+                        self.ui_s.log_error("Cannot find default output device");
                         return;
                     }
                 }
@@ -378,10 +376,10 @@ impl Audio{
                         panic!(err);
                     }).unwrap());
                 self.output_stream.as_ref().unwrap().play().unwrap();
-                Tui::debug_message(&format!("Playback started: device: {} sample_rate: {} channels: {}", device.name().unwrap(), default_config.sample_rate.0, default_config.channels), DebugMessageType::Log, &self.ui_s);
+                self.ui_s.log_info(&format!("Playback started: device: {} sample_rate: {} channels: {}", device.name().unwrap(), default_config.sample_rate.0, default_config.channels))
             }
             Err(err) => {
-                Tui::debug_message(&format!("Cannot find config for default output device err: {}", err), DebugMessageType::Error, &self.ui_s);
+                self.ui_s.log_error(&format!("Cannot find config for default output device err: {}", err));
                 panic!("Cannot find config for default output device err: {}", err);
             }
         }
@@ -435,7 +433,7 @@ impl Audio{
             None => out[..read*num_channels].to_vec()
         };
         if buf.push((peer, resampled)).is_err() {
-            Tui::debug_message("Couldn't push new sample to ringbuffer (It's probably full)", DebugMessageType::Error, &self.ui_s);
+            self.ui_s.log_error("Couldn't push new sample to ringbuffer (It's probably full)");
         }
     }
 }

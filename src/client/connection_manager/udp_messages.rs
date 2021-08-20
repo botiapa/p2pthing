@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use msg_types::{AnnounceSecret, ChatMessage};
 
-use crate::{client::{tui::Tui, udp_connection::UdpConnectionState}, common::{debug_message::DebugMessageType, encryption::SymmetricEncryption, message_type::{InterthreadMessage, MsgType, UdpPacket, msg_types}}};
+use crate::{client::{tui::Tui, udp_connection::UdpConnectionState, ui::UIConn}, common::{encryption::SymmetricEncryption, message_type::{InterthreadMessage, MsgType, UdpPacket, msg_types}}};
 
 use super::ConnectionManager;
 
@@ -11,7 +11,7 @@ impl ConnectionManager {
         let conn = match self.udp_connections.iter_mut().find(|x| x.address == addr) {
             Some(c) => c,
             None => {
-                Tui::debug_message(&format!("Tried reading from ({}), but couldn't find the associated connection", addr), DebugMessageType::Warning, &self.ui_s);
+                self.ui_s.log_warning(&format!("Tried reading from ({}), but couldn't find the associated connection", addr));
                 return;
             }
         };
@@ -68,7 +68,7 @@ impl ConnectionManager {
             UdpConnectionState::MidCall => {
                 let p = conn.associated_peer.clone().unwrap();
                 conn.state = UdpConnectionState::Connected;
-                Tui::debug_message(&format!("Punch through successfull. Connected to peer: ({})", p), DebugMessageType::Log, &self.ui_s);
+                self.ui_s.log_info(&format!("Punch through successfull. Connected to peer: ({})", p));
                 self.ui_s.send(InterthreadMessage::PunchThroughSuccessfull(p)).unwrap();
             }
             _ => {}
@@ -85,7 +85,7 @@ impl ConnectionManager {
         conn.symmetric_key = Some(SymmetricEncryption::new_from_secret(secret));
         conn.upgraded = true;
 
-        Tui::debug_message(&format!("Received secret for peer: ({})", conn.associated_peer.as_ref().unwrap()), DebugMessageType::Log, &self.ui_s);
+        self.ui_s.log_info(&format!("Received secret for peer: ({})", conn.associated_peer.as_ref().unwrap()));
         self.check_punchthrough(addr);
     }
 
@@ -101,17 +101,17 @@ impl ConnectionManager {
                 match msg.msg_type {
                     MsgType::AnnounceSecret => {
                         conn.upgraded = true;
-                        Tui::debug_message(&format!("Peer received secret: ({})", conn.associated_peer.as_ref().unwrap()), DebugMessageType::Log, &self.ui_s);
+                        self.ui_s.log_info(&format!("Peer received secret: ({})", conn.associated_peer.as_ref().unwrap()));
                         self.check_punchthrough(addr);
                     }
                     MsgType::ChatMessage => {
+                        self.ui_s.log_info(&format!("Chat message confirmed by: ({})", conn.associated_peer.as_ref().unwrap()));
                         self.ui_s.send(InterthreadMessage::OnChatMessageReceived(msg.custom_id.unwrap())).unwrap();
-                        Tui::debug_message(&format!("Chat message confirmed by: ({})", conn.associated_peer.as_ref().unwrap()), DebugMessageType::Log, &self.ui_s);
                     }
                     _ => unreachable!()
                 }
             }
-            None => Tui::debug_message(&format!("Couldn't find message with confirmation id: ({})", id), DebugMessageType::Warning, &self.ui_s)
+            None => self.ui_s.log_warning(&format!("Couldn't find message with confirmation id: ({})", id))
         }
     }
 
@@ -119,11 +119,11 @@ impl ConnectionManager {
         self.udp_connections.iter_mut()
         .find(|x| x.address == addr).unwrap()
         .state = UdpConnectionState::Connected;
-        Tui::debug_message("UDP Announcement has been accepted", DebugMessageType::Log, &self.ui_s);
+        self.ui_s.log_info("UDP Announcement has been accepted");
     }
 
     fn on_keep_alive(&mut self, addr: SocketAddr) {
-        Tui::debug_message(&format!("Keep alive message received from {}", addr), DebugMessageType::Log, &self.ui_s);
+        self.ui_s.log_info(&format!("Keep alive message received from {}", addr));
         self.check_punchthrough(addr);
     }
 

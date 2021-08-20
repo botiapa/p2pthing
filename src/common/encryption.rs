@@ -4,19 +4,19 @@ use aes_gcm_siv::Aes256GcmSiv; // Or `Aes128GcmSiv`
 use aes_gcm_siv::aead::{Aead, NewAead, generic_array::GenericArray};
 use num::Num;
 use rand_core::OsRng;
-use rsa::{BigUint, PaddingScheme, PublicKey, PublicKeyParts, RSAPrivateKey, RSAPublicKey, errors::Error};
+use rsa::{BigUint, PaddingScheme, PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey, errors::Error};
 use serde::{Serialize, Deserialize};
 
 pub struct AsymmetricEncryption{
-    public_key: RSAPublicKey,
-    secret_key: RSAPrivateKey,
+    public_key: RsaPublicKey,
+    secret_key: RsaPrivateKey,
 }
 
 impl AsymmetricEncryption {
     pub fn new() -> AsymmetricEncryption {
         let bits = 1024; // FIXME: Set this to a sane amount once in 'production'
-        let secret_key = RSAPrivateKey::new(&mut OsRng, bits).expect("Failed to generate a key");
-        let public_key = RSAPublicKey::from(&secret_key);
+        let secret_key = RsaPrivateKey::new(&mut OsRng, bits).expect("Failed to generate a key");
+        let public_key = RsaPublicKey::from(&secret_key);
 
         AsymmetricEncryption {
             secret_key,
@@ -38,6 +38,8 @@ impl AsymmetricEncryption {
     }
 }
 
+/// A struct which only contains the public key part of the encryption key.
+/// Therefore being safe to advertise.
 #[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub struct NetworkedPublicKey {
     n: String,
@@ -45,10 +47,10 @@ pub struct NetworkedPublicKey {
 }
 
 impl NetworkedPublicKey {
-    pub fn recreate_my_public_key(&self) -> Result<RSAPublicKey, Error> {
+    pub fn recreate_my_public_key(&self) -> Result<RsaPublicKey, Error> {
         let n = BigUint::from_str_radix(&self.n, 36).unwrap();
         let e = BigUint::from_str_radix(&self.e, 36).unwrap();
-        RSAPublicKey::new(n, e)
+        RsaPublicKey::new(n, e)
     }
 
     pub fn encrypt(&self, data: &[u8]) -> Vec<u8> {

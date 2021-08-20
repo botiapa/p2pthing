@@ -1,4 +1,4 @@
-use super::{connection_manager::{ConnectionManager}, tui::Tui};
+use super::{connection_manager::{ConnectionManager}, tui::Tui, ui::UI};
 
 pub fn start_client(ip: String) {
     let mut tui = Tui::new();
@@ -7,7 +7,7 @@ pub fn start_client(ip: String) {
     
     tui.main_loop(cm_s.clone(), own_public_key);
 
-    // If the gui interface exited, then signal the connection manager to stop as well
+    // If the ui interface exited, then signal the connection manager to stop as well
 
     ConnectionManager::quit(&cm_s);
 

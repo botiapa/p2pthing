@@ -3,7 +3,7 @@ use std::{io::{self, Read}, net::Shutdown, sync::mpsc::{self, Receiver}, thread,
 use io::ErrorKind;
 use mio::{Events, Interest, net::TcpStream};
 
-use crate::{client::{tui::Tui, udp_connection::UdpConnectionState}, common::{debug_message::DebugMessageType, message_type::{InterthreadMessage, MsgType, msg_types}}};
+use crate::{client::{tui::Tui, udp_connection::UdpConnectionState, ui::UIConn}, common::message_type::{InterthreadMessage, MsgType, msg_types}};
 
 use super::{ANNOUNCE_DELAY, CALL_DECAY, ConnectionManager, KEEP_ALIVE_DELAY, KEEP_ALIVE_DELAY_MIDCALL, RECONNECT_DELAY, RENDEZVOUS, STATS_UPDATE_DELAY, UDP_SOCKET, WAKER};
 
@@ -60,11 +60,11 @@ impl ConnectionManager {
                             match conn.associated_peer.clone() {
                                 Some(public_key) => {
                                     conn.send_raw_message(MsgType::KeepAlive, &(), false, None); //TODO: Error handling
-                                    Tui::debug_message(&format!("Sent keep alive message to ({})", public_key), DebugMessageType::Log, &self.ui_s);
+                                    self.ui_s.log_info(&format!("Sent keep alive message to ({})", public_key));
                                 }
                                 None => {
                                     conn.send_raw_message(MsgType::KeepAlive, &(), false, None); //TODO: Error handling
-                                    Tui::debug_message("Sent keep alive message to the rendezvous server", DebugMessageType::Log, &self.ui_s);
+                                    self.ui_s.log_info("Sent keep alive message to the rendezvous server");
                                 }
                             }
                             
@@ -107,7 +107,7 @@ impl ConnectionManager {
                         InterthreadMessage::SendChatMessage(p, msg, custom_id) => 
                             match self.send_udp_message(Some(p), MsgType::ChatMessage, &msg_types::ChatMessage {msg,}, true, Some(custom_id)) {
                                 Ok(_) => {}
-                                Err(e) => Tui::debug_message(&format!("Error while trying to send a chat message: {}", e.to_string()), DebugMessageType::Error, &self.ui_s)
+                                Err(e) => self.ui_s.log_error(&format!("Error while trying to send a chat message: {}", e.to_string()))
                         },
                         InterthreadMessage::OpusPacketReady(data) => {
                             for conn in &mut self.udp_connections {
@@ -121,7 +121,7 @@ impl ConnectionManager {
                         InterthreadMessage::ConnectToServer() => {
                             self.rendezvous_socket = TcpStream::connect(self.rendezvous_ip).unwrap();
                             self.poll.registry().register(&mut self.rendezvous_socket, RENDEZVOUS, Interest::READABLE).unwrap();
-                            Tui::debug_message("Trying to connect to server", DebugMessageType::Log, &self.ui_s);
+                            self.ui_s.log_info("Trying to connect to server");
                         }
                         InterthreadMessage::CallAccepted(p) => {
                             let msg = msg_types::CallResponse {
@@ -140,8 +140,7 @@ impl ConnectionManager {
                             let peer = self.peers.iter_mut().find(|peer| peer.public_key == p).unwrap();
                             peer.udp_addr = Some(conn.address);
                             
-                            Tui::debug_message(&format!("Accepted call from peer ({};{}), starting the punch through protocol", p, conn.address), 
-                            DebugMessageType::Log, &self.ui_s);
+                            self.ui_s.log_info(&format!("Accepted call from peer ({};{}), starting the punch through protocol", p, conn.address));
                         }
                         InterthreadMessage::CallDenied(p) => {
                             let msg = msg_types::CallResponse {
@@ -157,12 +156,12 @@ impl ConnectionManager {
 
                             let i = self.udp_connections.iter().position(|c| c.associated_peer.is_some() && c.associated_peer.clone().unwrap() == p).unwrap();
                             let conn = self.udp_connections.remove(i);
-                            Tui::debug_message(&format!("Denied call from peer ({};{})", p, conn.address), DebugMessageType::Log, &self.ui_s);
+                            self.ui_s.log_info(&format!("Denied call from peer ({};{})", p, conn.address));
                         }
                         InterthreadMessage::Call(p) => {
                             let peer = self.peers.iter().find(|peer| peer.public_key == p).unwrap();
                             if peer.udp_addr.is_some() {
-                                Tui::debug_message(&format!("Tried to call a peer which is already connected {}", p), DebugMessageType::Warning, &self.ui_s);
+                                self.ui_s.log_warning(&format!("Tried to call a peer which is already connected {}", p));
                                 continue;
                             }
                             let call = msg_types::Call {
@@ -171,9 +170,9 @@ impl ConnectionManager {
                                 udp_address: None
                             };
                             match self.calls_in_progress.iter().find(|(c, _)| c == &call) {
-                                Some(_) => Tui::debug_message(&format!("Tried to call a peer which has already been called: {}", p), DebugMessageType::Warning, &self.ui_s),
+                                Some(_) => self.ui_s.log_warning(&format!("Tried to call a peer which has already been called: {}", p),),
                                 None => {
-                                    Tui::debug_message(&format!("Calling peer: {}", p), DebugMessageType::Log, &self.ui_s);
+                                    self.ui_s.log_info(&format!("Calling peer: {}", p));
                             
                                     self.calls_in_progress.push((call.clone(), Instant::now()));
                                     self.send_tcp_message(MsgType::Call, &call).unwrap(); //TODO: Error handling
@@ -185,7 +184,7 @@ impl ConnectionManager {
                         InterthreadMessage::AudioChangePreferredKbits(kbits) => self.audio.change_preferred_kbits(kbits),
                         InterthreadMessage::AudioChangeMuteState(muted) => self.audio.change_mute_state(muted),
                         //InterthreadMessage::AudioChangeDenoiserState(denoiser_state) => self.audio.change_denoiser_state(denoiser_state),
-                        InterthreadMessage::AudioChangeDenoiserState(denoiser_state) => Tui::debug_message("Denoiser is currently disabled", DebugMessageType::Error, &self.ui_s),
+                        InterthreadMessage::AudioChangeDenoiserState(denoiser_state) => self.ui_s.log_error("Denoiser is currently disabled"),
                         InterthreadMessage::Quit() => {
                             match self.rendezvous_socket.shutdown(Shutdown::Both) {
                                 _ => {}
@@ -213,7 +212,7 @@ impl ConnectionManager {
                                 let mut msg_type = [0;1];
                                 match self.rendezvous_socket.read(&mut msg_type) {
                                     Ok(0) => {
-                                        Tui::debug_message("Disconnected from rendezvous server", DebugMessageType::Warning, &self.ui_s);
+                                        self.ui_s.log_warning("Disconnected from rendezvous server");
                                         break;
                                     }
                                     Ok(_) => {
@@ -226,9 +225,9 @@ impl ConnectionManager {
                                     Err(e) if e.kind() == ErrorKind::ConnectionReset || e.kind() == ErrorKind::NotConnected => {
                                         match e.kind() {
                                             ErrorKind::ConnectionReset => 
-                                                Tui::debug_message(&format!("Disconnected from rendezvous server, reconnecting in {}", RECONNECT_DELAY.as_secs()), DebugMessageType::Warning, &self.ui_s),
+                                            self.ui_s.log_warning(&format!("Disconnected from rendezvous server, reconnecting in {}", RECONNECT_DELAY.as_secs())),
                                             ErrorKind::NotConnected => 
-                                                Tui::debug_message(&format!("Reconnecting failed to rendezvous server, retrying in {}", RECONNECT_DELAY.as_secs()), DebugMessageType::Warning, &self.ui_s),
+                                            self.ui_s.log_warning(&format!("Reconnecting failed to rendezvous server, retrying in {}", RECONNECT_DELAY.as_secs())),
                                             _ => {}
                                         }
                                         
@@ -252,7 +251,7 @@ impl ConnectionManager {
                                         break;
                                     }
                                     Err(ref e) if e.kind() == io::ErrorKind::ConnectionReset => {
-                                        Tui::debug_message("Couldn't read from udp socket (ConnectionReset) ", DebugMessageType::Error, &self.ui_s);
+                                        self.ui_s.log_error("Couldn't read from udp socket (ConnectionReset) ");
                                     }
                                     e => println!("err={:?}", e), // Unexpected error
                                 }

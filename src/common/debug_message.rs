@@ -3,7 +3,7 @@ use std::fmt::Display;
 use chrono::{DateTime, Utc};
 
 pub enum DebugMessageType {
-    Log=0,
+    Info=0,
     Warning=1,
     Error=2,
 }

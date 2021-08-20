@@ -1,8 +1,8 @@
-use std::{io::{self, Write}};
+use std::io::{self, Write};
 
 use serde::Serialize;
 
-use crate::{client::tui::Tui, common::{debug_message::DebugMessageType, encryption::NetworkedPublicKey, message_type::MsgType}};
+use crate::{client::ui::UIConn, common::{encryption::NetworkedPublicKey, message_type::MsgType}};
 
 use super::ConnectionManager;
 
@@ -48,7 +48,7 @@ impl ConnectionManager {
                 ) {
                     Some(conn) => conn,
                     None => {
-                        Tui::debug_message(&format!("Cannot find udp connection with public key: ({})", public_key), DebugMessageType::Error, &self.ui_s);
+                        self.ui_s.log_error(&format!("Cannot find udp connection with public key: ({})", public_key));
                         return Err("Cannot find udp connection");
                     }
                 }

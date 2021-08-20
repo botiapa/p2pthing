@@ -7,11 +7,11 @@ use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use tui::{Terminal, backend::{CrosstermBackend}, widgets::ListState};
 
-use crate::common::{debug_message::{DebugMessage, DebugMessageType}, encryption::NetworkedPublicKey, message_type::{InterthreadMessage, Peer}};
+use crate::{client::ui::UIConn, common::{debug_message::{DebugMessage, DebugMessageType}, encryption::NetworkedPublicKey, message_type::{InterthreadMessage, Peer}}};
 
 use self::{popup::Popup, ui_peer::UIPeer};
 
-use super::udp_connection::statistics::Statistics;
+use super::{udp_connection::statistics::Statistics, ui::{CallStatusHolder, UI}};
 
 mod events;
 mod blocks;
@@ -28,18 +28,6 @@ enum ActiveBlock {
     InputList,
     OutputList,
     BitRateList
-}
-
-enum CallStatus {
-    PunchThroughSuccessfull,
-    PunchThroughInProgress,
-    SentRequest,
-    RequestFailed
-}
-
-pub struct CallStatusHolder {
-    status: CallStatus,
-    public_key: NetworkedPublicKey
 }
 
 //TODO: Clean up this struct
@@ -86,8 +74,6 @@ enum TabIndex {
     DEBUG = 2,
 }
 
-const CHOOSABLE_KBITS: [i32; 7] = [2, 8, 16, 32, 64, 128, 256];
-
 impl Tui {
     pub fn new() -> Tui {
         let poll = Poll::new().unwrap();
@@ -133,20 +119,18 @@ impl Tui {
         }
     }
 
-    pub fn get_notifier(&self) -> Sender<InterthreadMessage>{
+    pub fn on_chat_message(s: &Sender<InterthreadMessage>, peer: Peer, msg: String) {
+        s.log_info(&format!("Received chat message from: ({})", peer.public_key));
+        s.send(InterthreadMessage::OnChatMessage(peer, msg)).unwrap();
+    }
+}
+
+impl UI for Tui {
+    fn get_notifier(&self) -> Sender<InterthreadMessage>{
         self.ui_s.clone()
     }
 
-    pub fn debug_message(msg: &str, msg_type: DebugMessageType, s: &Sender<InterthreadMessage>) {
-        s.send(InterthreadMessage::DebugMessage(msg.into(), msg_type)).unwrap();
-    }
-
-    pub fn on_chat_message(s: &Sender<InterthreadMessage>, peer: Peer, msg: String) {
-        Tui::debug_message(&format!("Received chat message from: ({})", peer.public_key), DebugMessageType::Log, s);
-        s.send(InterthreadMessage::OnChatMessage(peer, msg)).unwrap();
-    }
-
-    pub fn main_loop(&mut self, cm_s: Sender<InterthreadMessage>, own_public_key: NetworkedPublicKey) {
+    fn main_loop(&mut self, cm_s: Sender<InterthreadMessage>, own_public_key: NetworkedPublicKey) {
         let r = self.running.clone();
         let r1 = self.running.clone();
 
@@ -251,4 +235,3 @@ impl Tui {
         }
     }
 }
-
