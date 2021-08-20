@@ -184,7 +184,8 @@ impl ConnectionManager {
                         InterthreadMessage::AudioChangeOutputDevice(d) => self.audio.change_output_device(d),
                         InterthreadMessage::AudioChangePreferredKbits(kbits) => self.audio.change_preferred_kbits(kbits),
                         InterthreadMessage::AudioChangeMuteState(muted) => self.audio.change_mute_state(muted),
-                        InterthreadMessage::AudioChangeDenoiserState(denoiser_state) => self.audio.change_denoiser_state(denoiser_state),
+                        //InterthreadMessage::AudioChangeDenoiserState(denoiser_state) => self.audio.change_denoiser_state(denoiser_state),
+                        InterthreadMessage::AudioChangeDenoiserState(denoiser_state) => Tui::debug_message("Denoiser is currently disabled", DebugMessageType::Error, &self.ui_s),
                         InterthreadMessage::Quit() => {
                             match self.rendezvous_socket.shutdown(Shutdown::Both) {
                                 _ => {}

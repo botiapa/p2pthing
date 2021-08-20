@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use cpal::{Device, Host, SampleFormat, traits::{DeviceTrait, HostTrait, StreamTrait}};
 use magnum_opus::{Bitrate, Channels, Decoder, Encoder};
 use mio_misc::channel::Sender as MioSender;
-use nnnoiseless::DenoiseState;
+//use nnnoiseless::DenoiseState;
 use ringbuf::{Producer, RingBuffer};
 use rubato::{FftFixedIn, InterpolationParameters, InterpolationType, Resampler, SincFixedIn, WindowFunction};
 
@@ -20,7 +20,7 @@ pub struct Audio {
     output_stream: Option<cpal::Stream>,
     encoder: Option<Encoder>,
     decoder: Option<Decoder>,
-    denoiser: Option<(Box<DenoiseState<'static>>, Box<DenoiseState<'static>>)>,
+    //denoiser: Option<(Box<DenoiseState<'static>>, Box<DenoiseState<'static>>)>,
     muted: bool,
     input_resampler: Option<FftFixedIn<f32>>,
     input_channels: Option<usize>,
@@ -51,7 +51,7 @@ impl Audio{
             preferred_input_device: None,
             preferred_output_device: None,
             started: false,
-            denoiser: None,
+            //denoiser: None,
         }
     }
 
@@ -102,7 +102,7 @@ impl Audio{
         }
     }
 
-    pub fn change_denoiser_state(&mut self, denoiser_state: bool) {
+    /*pub fn change_denoiser_state(&mut self, denoiser_state: bool) {
         if denoiser_state && self.denoiser.is_some() {return;}
         else {
             self.denoiser = match denoiser_state {
@@ -111,7 +111,7 @@ impl Audio{
             }
         }
         
-    }
+    }*/
 
     pub fn update_input_devices(&mut self) {
         match self.host.input_devices() {
@@ -167,7 +167,7 @@ impl Audio{
     }
 
     /// Apply denoising
-    pub fn denoise(denoiser: &mut (Box<DenoiseState>, Box<DenoiseState>), input: &mut [f32], ch_nmb: usize) -> Vec<f32> {
+    /*pub fn denoise(denoiser: &mut (Box<DenoiseState>, Box<DenoiseState>), input: &mut [f32], ch_nmb: usize) -> Vec<f32> {
         assert_eq!(input.len() % DenoiseState::FRAME_SIZE, 0, "Not optional input size in denoiser: input: {}  denoiser_frame_size: {}", input.len(), DenoiseState::FRAME_SIZE);
 
         // Convert from f32 to i16
@@ -218,7 +218,7 @@ impl Audio{
             *n = *n / i16::MAX as f32;
         }
         output
-    }
+    }*/
 
     pub fn process_and_send_packet(&mut self, packet: Vec<f32>) {
         let mut resampled = match &mut self.input_resampler {
@@ -228,10 +228,11 @@ impl Audio{
             None => packet
         };
 
-        let denoised = match &mut self.denoiser {
+        /*let denoised = match &mut self.denoiser {
             Some(denoiser) => Audio::denoise(denoiser, &mut resampled[..], self.input_channels.unwrap()),
             None => resampled
-        };
+        };*/
+        let denoised = resampled;
 
         let mut output = [0u8; 2000];
         let encoder = self.encoder.as_mut().unwrap();
@@ -279,7 +280,7 @@ impl Audio{
 
                 self.encoder = Some(encoder);
 
-                self.denoiser = Some((DenoiseState::new(), DenoiseState::new()));
+                //self.denoiser = Some((DenoiseState::new(), DenoiseState::new()));
 
                 let sample_rate = default_config.sample_rate.0;
                 self.input_channels = Some(channels as usize);
