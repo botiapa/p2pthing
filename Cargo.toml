@@ -13,8 +13,9 @@ readme = true
 default = ["server"]
 
 server = []
-client = ["crossterm", "tui", "textwrap", "ringbuf"]
-audio = ["cpal", "magnum-opus", "rubato"]
+client-tui = ["crossterm", "tui", "textwrap"]
+client-gui = ["p2pthing_gui"]
+audio = ["cpal", "magnum-opus", "rubato", "ringbuf"]
 #win = ["dxgcap"]
 
 [dependencies]
@@ -39,11 +40,17 @@ crossbeam = "0.8.0"
 mio-misc = "1.0.0"
 itertools = "0.10.0"
 
+### COMMON
+p2pthing_common = { path = "./common" }
+
 ### TUI
 #dxgcap = { version = "0.2.4", optional = true }
 crossterm = { version = "0.20", optional = true }
 tui = { version = "0.16.0", default-features = false, features = ['crossterm'], optional = true }
 textwrap = { version = "0.14.2", optional = true }
+
+### GUI
+p2pthing_gui = { path = "./gui/src-tauri", optional = true }
 
 ### AUDIO
 
@@ -52,3 +59,6 @@ magnum-opus  = { version = "0.3.2", optional = true }
 rubato = { version = "0.8.1", optional = true}
 ringbuf = {version = "0.2.3", optional = true }
 #nnnoiseless = {version = "0.3.2", optional = true}
+
+[dev-dependencies]
+tauri-cli = "1.0.0-beta.5"

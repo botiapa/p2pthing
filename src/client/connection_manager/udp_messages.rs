@@ -1,8 +1,8 @@
 use std::net::SocketAddr;
 
-use msg_types::{AnnounceSecret, ChatMessage};
+use p2pthing_common::{encryption::SymmetricEncryption, message_type::{InterthreadMessage, MsgType, UdpPacket, msg_types::{self, AnnounceSecret, ChatMessage}}, ui::UIConn};
 
-use crate::{client::{tui::Tui, udp_connection::UdpConnectionState, ui::UIConn}, common::{encryption::SymmetricEncryption, message_type::{InterthreadMessage, MsgType, UdpPacket, msg_types}}};
+use crate::client::{tui::Tui, udp_connection::UdpConnectionState};
 
 use super::ConnectionManager;
 

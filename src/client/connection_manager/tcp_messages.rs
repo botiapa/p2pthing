@@ -1,9 +1,7 @@
 use std::net::SocketAddr;
 
-use msg_types::{AnnounceRequest, AnnounceSecret, CallResponse, Disconnect};
 use mio::Token;
-
-use crate::{client::ui::UIConn, common::{encryption::SymmetricEncryption, lib::read_exact, message_type::{InterthreadMessage, MsgType, msg_types::{self, Call}, Peer}}};
+use p2pthing_common::{encryption::SymmetricEncryption, message_type::{InterthreadMessage, MsgType, Peer, msg_types::{self, AnnounceRequest, AnnounceSecret, Call, CallResponse, Disconnect}}, read_exact, ui::UIConn};
 
 use super::{ConnectionManager, UdpConnection, UdpConnectionState};
 

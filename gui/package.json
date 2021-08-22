@@ -1,0 +1,25 @@
+{
+  "name": "p2pthing_gui",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "serve": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^1.0.0-next.11",
+    "@tauri-apps/cli": "^1.0.0-beta.9",
+    "@tsconfig/svelte": "^2.0.1",
+    "svelte": "^3.37.0",
+    "svelte-check": "^2.1.0",
+    "svelte-preprocess": "^4.7.2",
+    "tslib": "^2.2.0",
+    "typescript": "^4.3.2",
+    "vite": "^2.4.4"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^1.0.0-beta.6"
+  }
+}

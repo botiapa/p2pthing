@@ -1,10 +1,32 @@
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, SystemTimeError};
 
-#[derive(Clone)]
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+#[derive(Clone, Serialize)]
 pub struct Statistics {
-    sent_bytes: Vec<(Instant, u64)>,
-    read_bytes: Vec<(Instant, u64)>,
+    sent_bytes: Vec<(SystemTime, u64)>,
+    read_bytes: Vec<(SystemTime, u64)>,
     pings: Vec<Duration>
+}
+
+struct InstantWrapper {}
+
+pub fn serialize<S>(instant: &Instant, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let duration = instant.elapsed();
+    duration.serialize(serializer)
+}
+
+pub fn deserialize<'de, D>(deserializer: D) -> Result<Instant, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let duration = Duration::deserialize(deserializer)?;
+    let now = Instant::now();
+    let instant = now.checked_sub(duration).ok_or_else(|| panic!("Err checked_add"))?;
+    Ok(instant)
 }
 
 // TODO: Optimize
@@ -19,11 +41,11 @@ impl Statistics {
     }
 
     pub fn sent_bytes(&mut self, size: u64) {
-        self.sent_bytes.push((Instant::now(), size));
+        self.sent_bytes.push((SystemTime::now(), size));
     }
 
     pub fn received_bytes(&mut self, size: u64) {
-        self.read_bytes.push((Instant::now(), size));
+        self.read_bytes.push((SystemTime::now(), size));
     }
 
     pub fn new_ping(&mut self, ping: Duration) {
@@ -31,27 +53,29 @@ impl Statistics {
     }
 
     /// Get the average received bytes/second since a given duration
-    pub fn get_avg_received(&self, dur: Duration) -> u64 {
+    pub fn get_avg_received(&self, dur: Duration) -> Result<u64, SystemTimeError> {
         let mut sum = 0; // Calculate the total received
         for (i, c) in self.read_bytes.iter().rev() {
-            if i.elapsed() > dur {
+            // FIXME: This is a horrible workaround
+            if i.elapsed()? > dur {
                 break;
             }
             sum += c;
         }
-        sum / dur.as_secs()
+        Ok(sum / dur.as_secs())
     }
 
     /// Get the average sent bytes/second since a given duration
-    pub fn get_avg_sent(&self, dur: Duration) -> u64 {
+    pub fn get_avg_sent(&self, dur: Duration) -> Result<u64, SystemTimeError> {
         let mut sum = 0; // Calculate the total sent
         for (i, c) in self.sent_bytes.iter().rev() {
-            if i.elapsed() > dur {
+            // FIXME: This is a horrible workaround
+            if i.elapsed()? > dur { 
                 break;
             }
             sum += c;
         }
-        sum / dur.as_secs()
+        Ok(sum / dur.as_secs())
     }
 
     /// Get the total received data in bytes

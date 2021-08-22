@@ -1,6 +1,6 @@
 use mio_misc::channel::Sender;
 
-use crate::common::{debug_message::DebugMessageType, encryption::NetworkedPublicKey, message_type::InterthreadMessage};
+use crate::{debug_message::DebugMessageType, encryption::NetworkedPublicKey, message_type::InterthreadMessage};
 
 pub const CHOOSABLE_KBITS: [i32; 7] = [2, 8, 16, 32, 64, 128, 256];
 
@@ -10,6 +10,11 @@ pub trait UI {
     fn get_notifier(&self) -> Sender<InterthreadMessage>;
     /// This function blocks the thread, display and handles the UI.
     fn main_loop(&mut self, cm_s: Sender<InterthreadMessage>, own_public_key: NetworkedPublicKey);
+}
+
+pub enum UIType {
+    TUI,
+    GUI
 }
 
 pub enum CallStatus {

@@ -1,9 +1,8 @@
 use std::io::Stdout;
 
 use crossterm::event::{Event, KeyCode};
+use p2pthing_common::encryption::NetworkedPublicKey;
 use tui::{Frame, backend::CrosstermBackend, layout::{Alignment, Constraint, Direction, Layout, Margin, Rect}, style::{Color, Style}, widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap}};
-
-use crate::common::encryption::NetworkedPublicKey;
 
 use super::{Popup, PopupReturn};
 

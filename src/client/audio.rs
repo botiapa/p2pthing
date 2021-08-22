@@ -3,11 +3,11 @@ use std::collections::HashMap;
 use cpal::{Device, Host, SampleFormat, traits::{DeviceTrait, HostTrait, StreamTrait}};
 use magnum_opus::{Bitrate, Channels, Decoder, Encoder};
 use mio_misc::channel::Sender as MioSender;
+use p2pthing_common::{encryption::NetworkedPublicKey, message_type::InterthreadMessage, ui::UIConn};
 //use nnnoiseless::DenoiseState;
 use ringbuf::{Producer, RingBuffer};
 use rubato::{FftFixedIn, InterpolationParameters, InterpolationType, Resampler, SincFixedIn, WindowFunction};
 
-use crate::{client::ui::UIConn, common::{encryption::NetworkedPublicKey, message_type::InterthreadMessage}};
 use itertools::Itertools;
 
 pub struct Audio {

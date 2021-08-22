@@ -2,10 +2,11 @@ use std::net::SocketAddr;
 use num_derive::{FromPrimitive, ToPrimitive};
 use serde::{Serialize, Deserialize};
 
-#[cfg(feature = "client")]
-use crate::client::udp_connection::statistics::Statistics;
+use crate::statistics::Statistics;
 
 use super::{debug_message::DebugMessageType, encryption::{NetworkedPublicKey, SymmetricEncryption}};
+
+#[derive(Serialize, Clone)]
 pub enum InterthreadMessage {
     SendChatMessage(NetworkedPublicKey, String, u32),
     OnChatMessage(Peer, String),
@@ -21,7 +22,6 @@ pub enum InterthreadMessage {
     AudioDataReadyToBeProcessed(Vec<f32>),
     DebugMessage(String, DebugMessageType),
     ConnectToServer(),
-    #[cfg(feature = "client")]
     ConnectionStatistics(Vec<(NetworkedPublicKey, Statistics)>),
     AudioChangeInputDevice(String),
     AudioChangeOutputDevice(String),
@@ -110,7 +110,7 @@ pub mod msg_types {
     use std::net::SocketAddr;
 
     use serde::{Serialize, Deserialize};
-    use crate::common::encryption::NetworkedPublicKey;
+    use crate::encryption::NetworkedPublicKey;
     
     /// The server announced itself to the client, requesting an announcement.
     #[derive(Serialize, Deserialize)]

@@ -1,9 +1,8 @@
 use std::io::Stdout;
 
 use crossterm::event::{Event};
+use p2pthing_common::encryption::NetworkedPublicKey;
 use tui::{Frame, backend::CrosstermBackend, layout::Rect};
-
-use crate::common::encryption::NetworkedPublicKey;
 
 pub mod call_popup;
 

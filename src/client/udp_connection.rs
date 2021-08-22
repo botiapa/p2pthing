@@ -1,15 +1,10 @@
 use std::{net::SocketAddr, rc::Rc, time::{Duration, Instant}};
 
 use mio::net::UdpSocket;
+use p2pthing_common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption}, message_type::{MsgEncryption, MsgType, UdpPacket}, statistics::Statistics};
 use serde::Serialize;
 
-use crate::common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption}, message_type::{MsgEncryption, MsgType, UdpPacket}};
-
-use self::statistics::Statistics;
-
 use super::connection_manager::{RELIABLE_MESSAGE_DELAY, KEEP_ALIVE_DELAY_MIDCALL, ANNOUNCE_DELAY, KEEP_ALIVE_DELAY, UdpHolder};
-
-pub mod statistics;
 
 #[derive(PartialEq)]
 pub enum UdpConnectionState {

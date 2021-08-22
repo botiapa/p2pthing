@@ -1,7 +1,8 @@
 use std::fmt::Display;
-
 use chrono::{DateTime, Utc};
+use serde::Serialize;
 
+#[derive(Serialize, Clone)]
 pub enum DebugMessageType {
     Info=0,
     Warning=1,

@@ -1,0 +1,25 @@
+[package]
+name = "p2pthing_common"
+version = "0.7.0"
+authors = ["KillSwitch"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+
+[dependencies]
+
+serde = {version = "1.0.123", features = ["derive"]}
+num = "0.4.0"
+num-derive = "0.3"
+num-traits = "0.2"
+chrono = { version = "0.4.19", features = ["serde"] }
+
+sha2 = "0.9.3"
+rsa = "0.5.0"
+aes-gcm-siv = "0.10.2"
+rand = "0.8.3"
+rand_core = { version = "0.6.3", features = ["getrandom"] }
+
+mio-misc = "1.0.0"

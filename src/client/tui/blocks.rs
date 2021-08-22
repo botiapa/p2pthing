@@ -1,8 +1,7 @@
 use std::{io::Stdout, time::Duration};
 
+use p2pthing_common::{debug_message::DebugMessageType, message_type::Peer, ui::{CHOOSABLE_KBITS, CallStatus}};
 use tui::{Frame, backend::CrosstermBackend, layout::{Constraint, Direction, Layout, Rect}, style::{Color, Modifier, Style}, symbols::DOT, text::{Span, Spans, Text}, widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Tabs, Wrap}};
-
-use crate::{client::ui::{CHOOSABLE_KBITS, CallStatus}, common::message_type::Peer};
 
 use super::{ActiveBlock, Tui};
 
@@ -194,11 +193,11 @@ impl Tui{
             ]));
             spans.push(Spans::from(vec![
                 Span::from("Sent average: "),
-                Span::styled(format!("{} bytes/s\n", stats.get_avg_sent(Duration::from_secs(5)).to_string()), Style::default().add_modifier(Modifier::BOLD))
+                Span::styled(format!("{} bytes/s\n", stats.get_avg_sent(Duration::from_secs(5)).unwrap_or(u64::MAX).to_string()), Style::default().add_modifier(Modifier::BOLD))
             ]));
             spans.push(Spans::from(vec![
                 Span::from("Received average: "),
-                Span::styled(format!("{} bytes/s\n", stats.get_avg_received(Duration::from_secs(5)).to_string()), Style::default().add_modifier(Modifier::BOLD))
+                Span::styled(format!("{} bytes/s\n", stats.get_avg_received(Duration::from_secs(5)).unwrap_or(u64::MAX).to_string()), Style::default().add_modifier(Modifier::BOLD))
             ]));
             spans.push(Spans::from(vec![
                 Span::from("Last ping: "),
@@ -288,9 +287,9 @@ impl Tui{
         let debug_message_list = List::new(self.debug_messages.iter()
         .map(|p| ListItem::new(Text::from(p.to_string()))
         .style(match p.msg_type {
-            super::DebugMessageType::Info => Style::default().fg(Color::White),
-            super::DebugMessageType::Warning => Style::default().fg(Color::Yellow),
-            super::DebugMessageType::Error => Style::default().fg(Color::Red)
+            DebugMessageType::Info => Style::default().fg(Color::White),
+            DebugMessageType::Warning => Style::default().fg(Color::Yellow),
+            DebugMessageType::Error => Style::default().fg(Color::Red)
         }))
         .collect::<Vec<ListItem>>())
         .block(Block::default().title("Debug Messages").borders(Borders::ALL))

@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use crate::common::message_type::{MsgType, UdpPacket, msg_types};
+use p2pthing_common::message_type::{MsgType, UdpPacket, msg_types};
 
 use super::RendezvousServer;
 

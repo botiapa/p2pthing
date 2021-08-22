@@ -1,8 +1,8 @@
 use std::io::{self, Read};
 
 use mio::{Events, Interest, Token};
+use p2pthing_common::message_type::{MsgType, msg_types::AnnounceRequest};
 
-use crate::common::{message_type::{MsgType, msg_types::AnnounceRequest}};
 
 use super::RendezvousServer;
 

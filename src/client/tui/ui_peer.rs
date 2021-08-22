@@ -1,4 +1,5 @@
-use crate::common::{encryption::NetworkedPublicKey, message_type::Peer};
+
+use p2pthing_common::{encryption::NetworkedPublicKey, message_type::Peer};
 
 use super::chat_input::ChatInput;
 

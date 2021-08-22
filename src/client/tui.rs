@@ -1,17 +1,14 @@
-use std::{io::{stdout}, panic, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}, mpsc::Receiver}};
+use std::{io::stdout, panic, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}, mpsc::Receiver}};
 
 use crossterm::{ErrorKind, QueueableCommand, event::{DisableMouseCapture, EnableMouseCapture, Event}, execute, terminal::{EnterAlternateScreen, LeaveAlternateScreen, enable_raw_mode}};
 use mio::{Events, Poll, Token, Waker};
 use mio_misc::{NotificationId, channel::{Sender, channel}, queue::NotificationQueue};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
-use tui::{Terminal, backend::{CrosstermBackend}, widgets::ListState};
-
-use crate::{client::ui::UIConn, common::{debug_message::{DebugMessage, DebugMessageType}, encryption::NetworkedPublicKey, message_type::{InterthreadMessage, Peer}}};
+use p2pthing_common::{debug_message::DebugMessage, encryption::NetworkedPublicKey, message_type::{InterthreadMessage, Peer}, statistics::Statistics, ui::{CallStatusHolder, UI, UIConn}};
+use tui::{Terminal, backend::CrosstermBackend, widgets::ListState};
 
 use self::{popup::Popup, ui_peer::UIPeer};
-
-use super::{udp_connection::statistics::Statistics, ui::{CallStatusHolder, UI}};
 
 mod events;
 mod blocks;

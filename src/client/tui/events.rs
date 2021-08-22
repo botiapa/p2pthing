@@ -3,10 +3,10 @@ use std::{sync::{atomic::Ordering, mpsc::TryRecvError}, thread};
 use chrono::Utc;
 use crossterm::event::{Event, KeyCode, KeyModifiers, read};
 use num::FromPrimitive;
+use p2pthing_common::{debug_message::{DebugMessage, DebugMessageType}, message_type::{InterthreadMessage, Peer}, ui::{CHOOSABLE_KBITS, CallStatus, CallStatusHolder}};
 
-use super::{ActiveBlock, CallStatusHolder, DebugMessageType, TabIndex, Tui, popup::PopupReturn, ui_peer::{ChatMessage, UIPeer}};
+use super::{ActiveBlock, TabIndex, Tui, popup::PopupReturn, ui_peer::{ChatMessage, UIPeer}};
 use super::super::connection_manager::ConnectionManager;
-use crate::{client::ui::{CHOOSABLE_KBITS, CallStatus}, common::message_type::{*, Peer}};
 use super::popup::call_popup::CallPopup;
 
 impl Tui {
@@ -71,7 +71,7 @@ impl Tui {
                 }
                 // FIXME: Duplicated code
                 InterthreadMessage::DebugMessage(msg, msg_type) => {
-                    self.debug_messages.push(super::DebugMessage {
+                    self.debug_messages.push(DebugMessage {
                         message: msg,
                         time: Utc::now(),
                         msg_type,
@@ -115,7 +115,7 @@ impl Tui {
     }
 
     pub fn log_message(&mut self, msg: String, msg_type: DebugMessageType) {
-        self.debug_messages.push(super::DebugMessage {
+        self.debug_messages.push(DebugMessage {
             message: msg,
             time: Utc::now(),
             msg_type,

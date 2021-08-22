@@ -1,13 +1,12 @@
 use std::io::{self, Write};
 
+use p2pthing_common::{encryption::NetworkedPublicKey, message_type::MsgType, ui::UIConn};
 use serde::Serialize;
-
-use crate::{client::ui::UIConn, common::{encryption::NetworkedPublicKey, message_type::MsgType}};
 
 use super::ConnectionManager;
 
 impl ConnectionManager {
-    pub fn send_tcp_message<T: ?Sized>(&mut self, t:MsgType, msg: &T) -> io::Result<()> where T: Serialize {
+    pub fn send_tcp_message<T: ?Sized>(&mut self, t: MsgType, msg: &T) -> io::Result<()> where T: Serialize {
         let t: u8 = num::ToPrimitive::to_u8(&t).unwrap();
         let msg = &bincode::serialize(msg).unwrap()[..];
 

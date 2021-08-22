@@ -2,7 +2,8 @@ use std::{collections::HashMap, env, net::SocketAddr, str::FromStr};
 //use scrap;
 use mio::{Interest, Poll, Token, net::UdpSocket};
 use mio::net::{TcpListener, TcpStream};
-use crate::common::{encryption::{AsymmetricEncryption, SymmetricEncryption}, message_type::{MsgType, msg_types, Peer}};
+use p2pthing_common::encryption::{AsymmetricEncryption, SymmetricEncryption};
+use p2pthing_common::message_type::{MsgType, Peer, msg_types};
 
 mod event_loop;
 mod utils;
