@@ -3,8 +3,9 @@ use std::{io::{self, Read}, net::Shutdown, sync::mpsc::{self, Receiver}, thread,
 use io::ErrorKind;
 use mio::{Events, Interest, net::TcpStream};
 use p2pthing_common::{message_type::{InterthreadMessage, MsgType, msg_types}, ui::UIConn};
+use p2pthing_tui::tui::Tui;
 
-use crate::client::{tui::Tui, udp_connection::UdpConnectionState};
+use crate::client::udp_connection::UdpConnectionState;
 
 use super::{ANNOUNCE_DELAY, CALL_DECAY, ConnectionManager, KEEP_ALIVE_DELAY, KEEP_ALIVE_DELAY_MIDCALL, RECONNECT_DELAY, RENDEZVOUS, STATS_UPDATE_DELAY, UDP_SOCKET, WAKER};
 

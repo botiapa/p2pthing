@@ -1,0 +1,21 @@
+[package]
+name = "p2pthing_tui"
+version = "0.0.0"
+authors = ["KillSwitch"]
+edition = "2018"
+
+[lib]
+
+[dependencies]
+#dxgcap = { version = "0.2.4", optional = true }
+p2pthing_common = { path = "../common" }
+crossterm = "0.20"
+tui = { version = "0.16.0", default-features = false, features = ['crossterm'] }
+textwrap = "0.14.2"
+mio = "0.7.7"
+mio-misc = "1.0.0"
+num = "0.4.0"
+num-derive = "0.3"
+num-traits = "0.2"
+ctrlc = { version = "3.1.7", features = ["termination"] }
+chrono = "0.4.19"

@@ -3,7 +3,7 @@ use std::{io::Stdout, time::Duration};
 use p2pthing_common::{debug_message::DebugMessageType, message_type::Peer, ui::{CHOOSABLE_KBITS, CallStatus}};
 use tui::{Frame, backend::CrosstermBackend, layout::{Constraint, Direction, Layout, Rect}, style::{Color, Modifier, Style}, symbols::DOT, text::{Span, Spans, Text}, widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Tabs, Wrap}};
 
-use super::{ActiveBlock, Tui};
+use crate::tui::{ActiveBlock, Tui};
 
 impl Tui{
     fn get_fg_color(&mut self, block: ActiveBlock) -> Color {

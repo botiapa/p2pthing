@@ -1,10 +1,7 @@
 [package]
 name = "p2pthing_gui"
-version = "0.1.0"
-description = "GUI for p2pthing"
-authors = [ "you" ]
-license = ""
-repository = ""
+version = "0.0.0"
+authors = [ "KillSwitch" ]
 default-run = "p2pthing_gui"
 edition = "2018"
 build = "src/build.rs"

@@ -8,16 +8,10 @@ use num_traits::FromPrimitive;
 use p2pthing_common::{debug_message::DebugMessage, encryption::NetworkedPublicKey, message_type::{InterthreadMessage, Peer}, statistics::Statistics, ui::{CallStatusHolder, UI, UIConn}};
 use tui::{Terminal, backend::CrosstermBackend, widgets::ListState};
 
-use self::{popup::Popup, ui_peer::UIPeer};
-
-mod events;
-mod blocks;
-mod chat_input;
-mod ui_peer;
-mod popup;
+use crate::{popup::Popup, ui_peer::UIPeer};
 
 #[derive(PartialEq)]
-enum ActiveBlock {
+pub(crate) enum ActiveBlock {
     ContactList,
     ChatMessages,
     ChatInput,
@@ -27,48 +21,48 @@ enum ActiveBlock {
     BitRateList
 }
 
-//TODO: Clean up this struct
-pub struct Tui {
-    cm_s: Option<Sender<InterthreadMessage>>,
-    ui_s: Sender<InterthreadMessage>,
-    ui_r: Receiver<InterthreadMessage>,
-    event_s: Sender<Result<Event, ErrorKind>>,
-    event_r: Receiver<Result<Event, ErrorKind>>,
-    poll: Poll,
-    peers: Vec<UIPeer>,
-    contact_list_state: ListState,
-    running: Arc<AtomicBool>,
-    debug_messages: Vec<DebugMessage>,
-    debug_messages_state: ListState,
-    chat_messages_length: usize,
-    chat_messages_list_state: Option<usize>,
-    settings_inputs: Option<Vec<String>>,
-    settings_inputs_state: ListState,
-    settings_outputs: Option<Vec<String>>,
-    settings_outputs_state: ListState,
-    settings_kbits_state: ListState,
-    /// Is audio recording mute on
-    muted: bool,
-    /// Is the denoiser on
-    denoiser: bool,
-    selected_tab: usize,
-    tab_titles: Vec<String>,
-    active_block: ActiveBlock,
-    is_active: bool,
-    own_public_key: Option<NetworkedPublicKey>,
-    calls: Vec<CallStatusHolder>,
-    next_msg_id: u32,
-    active_popup: Option<Box<dyn Popup>>,
-    conn_stats: Vec<(NetworkedPublicKey, Statistics)>,
-    /// Whether the debug panel is visible above the chat messages
-    debug_visible: bool
-}
-
 #[derive(FromPrimitive)]
-enum TabIndex {
+pub(crate) enum TabIndex {
     MAIN = 0,
     SETTINGS = 1,
     DEBUG = 2,
+}
+
+//TODO: Clean up this struct
+pub struct Tui {
+    pub(crate) cm_s: Option<Sender<InterthreadMessage>>,
+    pub(crate) ui_s: Sender<InterthreadMessage>,
+    pub(crate) ui_r: Receiver<InterthreadMessage>,
+    pub(crate) event_s: Sender<Result<Event, ErrorKind>>,
+    pub(crate) event_r: Receiver<Result<Event, ErrorKind>>,
+    pub(crate) poll: Poll,
+    pub(crate) peers: Vec<UIPeer>,
+    pub(crate) contact_list_state: ListState,
+    pub(crate) running: Arc<AtomicBool>,
+    pub(crate) debug_messages: Vec<DebugMessage>,
+    pub(crate) debug_messages_state: ListState,
+    pub(crate) chat_messages_length: usize,
+    pub(crate) chat_messages_list_state: Option<usize>,
+    pub(crate) settings_inputs: Option<Vec<String>>,
+    pub(crate) settings_inputs_state: ListState,
+    pub(crate) settings_outputs: Option<Vec<String>>,
+    pub(crate) settings_outputs_state: ListState,
+    pub(crate) settings_kbits_state: ListState,
+    /// Is audio recording mute on
+    pub(crate) muted: bool,
+    /// Is the denoiser on
+    pub(crate) denoiser: bool,
+    pub(crate) selected_tab: usize,
+    pub(crate) tab_titles: Vec<String>,
+    pub(crate) active_block: ActiveBlock,
+    pub(crate) is_active: bool,
+    pub(crate) own_public_key: Option<NetworkedPublicKey>,
+    pub(crate) calls: Vec<CallStatusHolder>,
+    pub(crate) next_msg_id: u32,
+    pub(crate) active_popup: Option<Box<dyn Popup>>,
+    pub(crate) conn_stats: Vec<(NetworkedPublicKey, Statistics)>,
+    /// Whether the debug panel is visible above the chat messages
+    pub(crate) debug_visible: bool
 }
 
 impl Tui {

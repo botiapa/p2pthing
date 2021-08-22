@@ -5,8 +5,9 @@ use crossterm::event::{Event, KeyCode, KeyModifiers, read};
 use num::FromPrimitive;
 use p2pthing_common::{debug_message::{DebugMessage, DebugMessageType}, message_type::{InterthreadMessage, Peer}, ui::{CHOOSABLE_KBITS, CallStatus, CallStatusHolder}};
 
-use super::{ActiveBlock, TabIndex, Tui, popup::PopupReturn, ui_peer::{ChatMessage, UIPeer}};
-use super::super::connection_manager::ConnectionManager;
+use crate::tui::{ActiveBlock, TabIndex, Tui};
+
+use super::{popup::PopupReturn, ui_peer::{ChatMessage, UIPeer}};
 use super::popup::call_popup::CallPopup;
 
 impl Tui {
@@ -136,7 +137,7 @@ impl Tui {
         let i = self.contact_list_state.selected().unwrap();
         let peer = self.peers.get_mut(i).unwrap();
         if !peer.chat_input.get_string().is_empty() {
-            ConnectionManager::send_chat_message(&self.cm_s.as_mut().unwrap(), peer.get_public_key().clone(), peer.chat_input.get_string(), self.next_msg_id);
+            self.cm_s.as_ref().unwrap().send(InterthreadMessage::SendChatMessage(peer.get_public_key().clone(), peer.chat_input.get_string(), self.next_msg_id)).unwrap();
             peer.chat_messages.push(ChatMessage {
                 author: Peer {
                     addr: None,
@@ -422,7 +423,7 @@ impl Tui {
                                     status: CallStatus::SentRequest,
                                     public_key: p.clone()
                                 });
-                                ConnectionManager::call(&self.cm_s.as_mut().unwrap(), p.clone());
+                                self.cm_s.as_ref().unwrap().send(InterthreadMessage::Call(p.clone())).unwrap();
                             }
                             None => {}
                         }
@@ -526,7 +527,7 @@ impl Tui {
                         if self.peers.len() == 0 {return;}
                         match self.contact_list_state.selected() {
                             Some(i) => {
-                                ConnectionManager::call(&self.cm_s.as_mut().unwrap(), self.peers.get(i).unwrap().get_public_key().clone());
+                                self.cm_s.as_ref().unwrap().send(InterthreadMessage::Call(self.peers.get(i).unwrap().get_public_key().clone())).unwrap();
                             }
                             None => {}
                         }

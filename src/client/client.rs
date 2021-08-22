@@ -1,6 +1,7 @@
-use super::{connection_manager::ConnectionManager, tui::Tui};
+use super::connection_manager::ConnectionManager;
 use p2pthing_common::ui::{UI, UIType};
 use p2pthing_gui::gui::Gui;
+use p2pthing_tui::tui::Tui;
 
 
 pub fn start_client(ip: String, ui_type: UIType) {
