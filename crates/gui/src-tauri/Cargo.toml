@@ -5,6 +5,7 @@ authors = [ "KillSwitch" ]
 default-run = "p2pthing_gui"
 edition = "2018"
 build = "src/build.rs"
+description = "GUI client for p2pthing"
 
 [build-dependencies]
 tauri-build = { version = "1.0.0-beta.4" }
