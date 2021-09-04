@@ -1,12 +1,14 @@
-use std::net::SocketAddr;
+use std::{collections::HashMap, net::SocketAddr, fmt::Display};
 use num_derive::{FromPrimitive, ToPrimitive};
 use serde::{Serialize, Deserialize};
 
 use crate::statistics::Statistics;
 
+use self::msg_types::{FileChunks, RequestFileChunks};
+
 use super::{debug_message::DebugMessageType, encryption::{NetworkedPublicKey, SymmetricEncryption}};
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum InterthreadMessage {
     SendChatMessage(NetworkedPublicKey, String, u32),
     OnChatMessage(Peer, String),
@@ -23,6 +25,7 @@ pub enum InterthreadMessage {
     DebugMessage(String, DebugMessageType),
     ConnectToServer(),
     ConnectionStatistics(Vec<(NetworkedPublicKey, Statistics)>),
+    // AUDIO
     AudioChangeInputDevice(String),
     AudioChangeOutputDevice(String),
     AudioNewInputDevices(Option<Vec<String>>),
@@ -30,10 +33,26 @@ pub enum InterthreadMessage {
     AudioChangePreferredKbits(i32),
     AudioChangeMuteState(bool),
     AudioChangeDenoiserState(bool),
+    // FILES
+    /// - **From client to CM:** Start sending the specified files to a peer.
+    /// - **From CM to FM:** Prepare the files for uploading
+    SendFiles(NetworkedPublicKey, Vec<String>),
+    /// - **From CM to FM:** Prepare for receiving the file
+    ReceiveFiles(Vec<SplitFile>, NetworkedPublicKey),
+    /// - **From FM to CM:** Files ready for upload
+    FilesReady(NetworkedPublicKey, Vec<SplitFile>),
+    /// - **From CM to FM:** Load the specified file data chunks and then notify CM to forward it to the peer
+    GetFileChunks(RequestFileChunks, NetworkedPublicKey),
+    /// - **From FM to CM:** Notify CM about loaded file data chunks
+    FileChunksReady(Vec<FileDataChunk>, NetworkedPublicKey),
+    /// - **From CM to FM:** Store the received file data chunks
+    StoreFileChunk(FileChunks),
+    /// - **From FM to CM:** Request the specified file chunks from the specified peers
+    RequestFileChunks(HashMap<NetworkedPublicKey, Vec<FileChunk>>),
     WakeUp,
 }
 
-#[derive(FromPrimitive)] #[derive(ToPrimitive)]
+#[derive(ToPrimitive, FromPrimitive)]
 pub enum MsgType {
     Announce=0,
     AnnounceSecret=8,
@@ -45,7 +64,10 @@ pub enum MsgType {
     ChatMessageReceived=6,
     AnnounceRequest=7,
     MessageConfirmation=9,
-    OpusPacket=10
+    OpusPacket=10,
+    SendFilesRequest=11,
+    RequestFileChunks=12,
+    FileChunks=13
 }
 
 #[derive(Serialize, Deserialize)]
@@ -106,11 +128,45 @@ pub struct UdpPacket {
     pub upgraded: MsgEncryption
 }
 
+pub type FileId = String;
+
+/// A file which has been split into transmittable chunks
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SplitFile {
+    /// This is a base64 value that is obtained by hashing the filename and file size
+    pub file_id: FileId,
+    pub file_name: String,
+    pub total_length: u64,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct FileChunk {
+    pub file_id: FileId, 
+    pub index: usize
+}
+
+impl Display for FileChunk {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}[{}]", &self.file_id[0..10], self.index)
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct FileDataChunk {
+    pub file_id: FileId, 
+    pub index: usize,
+    pub data: Vec<u8>
+}
+
+/// A single chunk of a file
+
 pub mod msg_types {
     use std::net::SocketAddr;
 
     use serde::{Serialize, Deserialize};
     use crate::encryption::NetworkedPublicKey;
+
+    use super::{FileChunk, FileDataChunk, SplitFile};
     
     /// The server announced itself to the client, requesting an announcement.
     #[derive(Serialize, Deserialize)]
@@ -148,6 +204,7 @@ pub mod msg_types {
     pub struct ChatMessage {
         pub msg: String,
     }
+
     #[derive(Serialize, Deserialize)]
     pub struct ChatMessageReceived {
         pub index: u32
@@ -162,4 +219,20 @@ pub mod msg_types {
     pub struct ReliableMessageReceived {
         pub id: u32
     }
+
+    #[derive(Serialize, Deserialize)]
+    pub struct SendFilesRequest {
+        pub files: Vec<SplitFile>,
+    }
+
+    #[derive(Clone, Serialize, Deserialize)]
+    pub struct RequestFileChunks {
+        pub chunks: Vec<FileChunk>
+    }
+
+    #[derive(Clone, Serialize, Deserialize)]
+    pub struct FileChunks {
+        pub chunks: Vec<FileDataChunk>
+    }
+    
 }

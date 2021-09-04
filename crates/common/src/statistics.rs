@@ -2,8 +2,12 @@ use std::time::{Duration, Instant, SystemTime, SystemTimeError};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-#[derive(Clone, Serialize)]
+const MAX_VEC_LENGTH: usize = 30;
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Statistics {
+    total_sent_bytes: u64,
+    total_read_bytes: u64,
     sent_bytes: Vec<(SystemTime, u64)>,
     read_bytes: Vec<(SystemTime, u64)>,
     pings: Vec<Duration>
@@ -34,18 +38,28 @@ where
 impl Statistics {
     pub fn new() -> Self {
         Statistics {
+            total_sent_bytes: 0,
+            total_read_bytes: 0,
             sent_bytes: vec![],
             read_bytes: vec![],
-            pings: vec![]
+            pings: vec![],
         }
     }
 
     pub fn sent_bytes(&mut self, size: u64) {
+        self.total_sent_bytes += size;
         self.sent_bytes.push((SystemTime::now(), size));
+        if self.sent_bytes.len() > MAX_VEC_LENGTH {
+            self.sent_bytes.swap_remove(0);
+        }
     }
 
     pub fn received_bytes(&mut self, size: u64) {
+        self.total_read_bytes += size;
         self.read_bytes.push((SystemTime::now(), size));
+        if self.read_bytes.len() > MAX_VEC_LENGTH {
+            self.read_bytes.swap_remove(0);
+        }
     }
 
     pub fn new_ping(&mut self, ping: Duration) {
@@ -80,20 +94,12 @@ impl Statistics {
 
     /// Get the total received data in bytes
     pub fn get_total_received(&self) -> u64 {
-        let mut sum = 0;
-        for (_, c) in self.read_bytes.iter() {
-            sum += c;
-        }
-        sum
+        self.total_read_bytes
     }
 
     /// Get the total sent data in bytes
     pub fn get_total_sent(&self) -> u64 {
-        let mut sum = 0;
-        for (_, c) in self.sent_bytes.iter() {
-            sum += c;
-        }
-        sum
+        self.total_sent_bytes
     }
 
     pub fn get_last_ping(&self) -> Option<&Duration> {

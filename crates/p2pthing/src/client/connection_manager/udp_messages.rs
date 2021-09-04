@@ -46,17 +46,25 @@ impl ConnectionManager {
                 self.on_keep_alive(addr);
             }
             Some(MsgType::ChatMessage) => {
-                let chat_message: msg_types::ChatMessage = bincode::deserialize(&buf[1..]).unwrap();
-                self.on_chat_message(addr, chat_message);
+                self.on_chat_message(addr, &buf[1..]);
             }
             Some(MsgType::AnnounceSecret) => {
                 self.on_secret_announce(addr, &buf[1..]);
             }
             Some(MsgType::MessageConfirmation) => {
-                self.on_confirmation_message(addr, &buf[1..])
+                self.on_confirmation_message(addr, &buf[1..]);
             }
             Some(MsgType::OpusPacket) => {
-                self.on_opus_packet(addr, &buf[1..])
+                self.on_opus_packet(addr, &buf[1..]);
+            }
+            Some(MsgType::SendFilesRequest) => {
+                self.on_send_file_request(addr, &buf[1..]);
+            }
+            Some(MsgType::RequestFileChunks) => {
+                self.on_request_file_chunks(addr, &buf[1..]);
+            }
+            Some(MsgType::FileChunks) => {
+                self.on_file_chunks(addr, &buf[1..]);
             }
             _ => unreachable!()
         }
@@ -109,6 +117,8 @@ impl ConnectionManager {
                         self.ui_s.log_info(&format!("Chat message confirmed by: ({})", conn.associated_peer.as_ref().unwrap()));
                         self.ui_s.send(InterthreadMessage::OnChatMessageReceived(msg.custom_id.unwrap())).unwrap();
                     }
+                    MsgType::SendFilesRequest => {}
+                    MsgType::RequestFileChunks => {}
                     _ => unreachable!()
                 }
             }
@@ -128,7 +138,8 @@ impl ConnectionManager {
         self.check_punchthrough(addr);
     }
 
-    fn on_chat_message(&mut self, addr: SocketAddr, chat_message: ChatMessage) {
+    fn on_chat_message(&mut self, addr: SocketAddr, data: &[u8]) {
+        let chat_message: msg_types::ChatMessage = bincode::deserialize(data).unwrap();
         let p = self.peers.iter().find(|p| p.udp_addr.unwrap() == addr).unwrap();
         Tui::on_chat_message(&self.ui_s, p.clone(), chat_message.msg);
     }
@@ -137,7 +148,44 @@ impl ConnectionManager {
         let data: Vec<u8> = bincode::deserialize(data).unwrap();
         let p = self.peers.iter().find(|p| p.udp_addr.unwrap() == addr).unwrap();
 
-
         self.audio.decode_and_queue_packet(&data[..], p.public_key.clone());
     }
+
+    fn on_send_file_request(&mut self, addr: SocketAddr, data: &[u8]) {
+        let data: msg_types::SendFilesRequest = bincode::deserialize(data).unwrap();
+        let p = self.peers.iter().find(|p| p.udp_addr.unwrap() == addr).unwrap();
+
+        //TODO: Ability to accept or deny file download
+        for file in data.files {
+            if let Err(e) = self.file_manager.start_receiving_file(file, p.public_key.clone()) {
+                self.ui_s.log_error(&format!("Failed preparing to receive file: {}", e));
+            }
+        }
+    }
+
+    fn on_request_file_chunks(&mut self, addr: SocketAddr, data: &[u8]) {
+        let data: msg_types::RequestFileChunks = bincode::deserialize(data).unwrap();
+        let p = self.peers.iter().find(|p| p.udp_addr.unwrap() == addr).unwrap();
+        let public_key = p.public_key.clone();
+
+        //TODO: Ability to accept or deny file download
+        match self.file_manager.get_file_chunks(data) {
+            Ok(chunks) => {
+                if let Err(e) = self.send_udp_message(Some(public_key), MsgType::FileChunks, &msg_types::FileChunks {chunks,}, false, None) {
+                    self.ui_s.log_error(&format!("Error while trying to send a file chunk request: {}", e.to_string()));
+                }
+            },
+            Err(e) => self.ui_s.log_error(&format!("Failed reading file chunks: {}", &e)),
+        }
+    }
+
+    fn on_file_chunks(&mut self, addr: SocketAddr, data: &[u8]) {
+        let data: msg_types::FileChunks = bincode::deserialize(data).unwrap();
+
+        //TODO: Ability to accept or deny file download
+        if let Err(e) = self.file_manager.store_file_chunks(data) {
+            self.ui_s.log_error(&format!("Error while trying to save a file chunk: {}", e)); 
+        }
+    }
+    
 }

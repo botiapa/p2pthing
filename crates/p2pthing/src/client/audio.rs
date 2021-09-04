@@ -349,6 +349,7 @@ impl Audio{
                     self.output_resampler = Some(resampler);
                 }
 
+                let ui_s = self.ui_s.clone();
                 self.output_stream = Some(device.build_output_stream(&default_config, 
                     move |output: &mut [f32], _: &cpal::OutputCallbackInfo| {
                             if !out_r.is_empty() {
@@ -373,7 +374,7 @@ impl Audio{
                             }
                         }
                         , move |err| {
-                        panic!(err);
+                            ui_s.log_error(&format!("Error while running output stream: {}", err));
                     }).unwrap());
                 self.output_stream.as_ref().unwrap().play().unwrap();
                 self.ui_s.log_info(&format!("Playback started: device: {} sample_rate: {} channels: {}", device.name().unwrap(), default_config.sample_rate.0, default_config.channels))

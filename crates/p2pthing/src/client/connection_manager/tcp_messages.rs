@@ -98,21 +98,24 @@ impl ConnectionManager {
             let p = self.peers.iter_mut().find(|p| p.public_key == call.callee).unwrap();
             p.udp_addr = Some(udp_address);
             
-            let i = self.calls_in_progress.iter()
-            .position(|(c, _)| c.callee == call.callee)
-            .unwrap();
-            self.calls_in_progress.remove(i);
+            if let Some(i) = self.calls_in_progress.iter().position(|(c, _)| c.callee == call.callee) {
+                self.calls_in_progress.remove(i);
     
-            let sym_key = SymmetricEncryption::new();
-            let mut conn = UdpConnection::new(UdpConnectionState::MidCall, udp_address, self.udp_socket.clone(), Some(sym_key), self.encryption.clone());
-            conn.associated_peer = Some(call.callee.clone());
-            self.ui_s.log_info(
-            &format!("A sent call has been accepted by peer ({};{}), starting the punch through protocol", call.callee, conn.address));
-
-            conn.send_udp_message_with_public_key(MsgType::AnnounceSecret, &AnnounceSecret{secret: conn.symmetric_key.as_ref().unwrap().secret.clone()}, true, None).unwrap();
-
-            self.ui_s.send(InterthreadMessage::CallAccepted(p.public_key.clone())).unwrap();
-            self.udp_connections.push(conn);
+                let sym_key = SymmetricEncryption::new();
+                let mut conn = UdpConnection::new(UdpConnectionState::MidCall, udp_address, self.udp_socket.clone(), Some(sym_key), self.encryption.clone());
+                conn.associated_peer = Some(call.callee.clone());
+                self.ui_s.log_info(
+                &format!("A sent call has been accepted by peer ({};{}), starting the punch through protocol", call.callee, conn.address));
+    
+                conn.send_udp_message_with_public_key(MsgType::AnnounceSecret, &AnnounceSecret{secret: conn.symmetric_key.as_ref().unwrap().secret.clone()}, true, None).unwrap();
+    
+                self.ui_s.send(InterthreadMessage::CallAccepted(p.public_key.clone())).unwrap();
+                self.udp_connections.push(conn);
+            }
+            else {
+                self.ui_s.log_warning(
+                    &format!("An invalid call has been accepted by address ({}), discarding", udp_address));
+            }
         }
     }
 

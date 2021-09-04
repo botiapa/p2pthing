@@ -19,5 +19,4 @@ mio = { version = "0.7.7", features = [ "os-poll" ] }
 mio-misc = "1.0.0"
 
 [features]
-default = [ "custom-protocol" ]
 custom-protocol = [ "tauri/custom-protocol" ]

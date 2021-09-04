@@ -1,4 +1,4 @@
-#[cfg(any(feature = "client-tui", feature = "client-gui"))]
+#[cfg(any(feature = "tui", feature = "gui"))]
 mod client;
 mod server;
 mod common;

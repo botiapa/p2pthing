@@ -53,3 +53,4 @@ no_llvm_build
 # Before adding new lines, see the comment at the top.
 db
 Cargo.lock
+downloads/**

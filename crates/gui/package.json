@@ -20,6 +20,8 @@
     "vite": "^2.4.4"
   },
   "dependencies": {
-    "@tauri-apps/api": "^1.0.0-beta.6"
+    "@tauri-apps/api": "^1.0.0-beta.6",
+    "pug": "^3.0.2",
+    "sass": "^1.38.1"
   }
 }

@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, rc::Rc, time::{Duration, Instant}};
+use std::{io, net::SocketAddr, rc::Rc, time::{Duration, Instant}};
 
 use mio::net::UdpSocket;
 use p2pthing_common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption}, message_type::{MsgEncryption, MsgType, UdpPacket}, statistics::Statistics};
@@ -64,7 +64,7 @@ impl UdpConnection{
     }
 
     /// Send a UDP packet encrypted with the symmetric key, which optionally can be reliable
-    pub fn send_udp_message_with_asymmetric_key<T: ?Sized>(&mut self, msg_type: MsgType, msg: &T, reliable: bool, custom_id: Option<u32>) -> Result<(), &'static str> where T: Serialize  {
+    pub fn send_udp_message_with_asymmetric_key<T: ?Sized>(&mut self, msg_type: MsgType, msg: &T, reliable: bool, custom_id: Option<u32>) -> Result<(), String> where T: Serialize  {
         let t: u8 = num::ToPrimitive::to_u8(&msg_type).unwrap();
         let msg = &bincode::serialize(msg).unwrap()[..];
         let chained: &[u8] = &[&[t], msg].concat()[..];
@@ -72,7 +72,7 @@ impl UdpConnection{
         let symmetric_key = match &self.symmetric_key{
             Some(p) => p,
             None => {
-                return Err("Cannot find symmetric key");
+                return Err("Cannot find symmetric key".into());
             }
         };
         let encrypted = symmetric_key.encrypt(&chained[..]);
@@ -83,13 +83,16 @@ impl UdpConnection{
             msg_id: self.next_msg_id,
             upgraded: MsgEncryption::SymmetricKey
         };
-        self.send_udp_packet(msg_type, wrapped, reliable, custom_id);
+
+        if let Err(e) =  self.send_udp_packet(msg_type, wrapped, reliable, custom_id) {
+            return Err(format!("Error while sending udp packet: {}", e));
+        }
 
         Ok(())
     }
 
     /// Send a UDP packet encrypted with the public, which optionally can be reliable
-    pub fn send_udp_message_with_public_key<T: ?Sized>(&mut self, msg_type: MsgType, msg: &T, reliable: bool, custom_id: Option<u32>) -> Result<(), &'static str> where T: Serialize  {
+    pub fn send_udp_message_with_public_key<T: ?Sized>(&mut self, msg_type: MsgType, msg: &T, reliable: bool, custom_id: Option<u32>) -> Result<(), String> where T: Serialize  {
         let t: u8 = num::ToPrimitive::to_u8(&msg_type).unwrap();
         let msg = &bincode::serialize(msg).unwrap()[..];
         let chained: &[u8] = &[&[t], msg].concat()[..];
@@ -97,7 +100,7 @@ impl UdpConnection{
         let public_key = match &self.associated_peer{
             Some(p) => p,
             None => {
-                return Err("Cannot find udp connection");
+                return Err("Cannot find udp connection".into());
             }
         };
         let encrypted = public_key.encrypt(chained);
@@ -107,13 +110,15 @@ impl UdpConnection{
             msg_id: self.next_msg_id,
             upgraded: MsgEncryption::PublicKey
         };
-        self.send_udp_packet(msg_type, wrapped, reliable, custom_id);
+        if let Err(e) = self.send_udp_packet(msg_type, wrapped, reliable, custom_id){
+            return Err(format!("Error while sending udp packet: {}", e));
+        }
         
         Ok(())
     }
 
     /// Send message unencrypted
-    pub fn send_raw_message<T: ?Sized>(&mut self, msg_type: MsgType, msg: &T, reliable: bool, custom_id: Option<u32>) where T: Serialize {
+    pub fn send_raw_message<T: ?Sized>(&mut self, msg_type: MsgType, msg: &T, reliable: bool, custom_id: Option<u32>) -> io::Result<()> where T: Serialize {
         let t: u8 = num::ToPrimitive::to_u8(&msg_type).unwrap();
         let msg = &bincode::serialize(msg).unwrap()[..];
         let chained: &[u8] = &[&[t], msg].concat()[..];
@@ -124,10 +129,10 @@ impl UdpConnection{
             msg_id: self.next_msg_id,
             upgraded: MsgEncryption::Unencrypted
         };
-        self.send_udp_packet(msg_type, packet, reliable, custom_id);
+        self.send_udp_packet(msg_type, packet, reliable, custom_id)
     }
 
-    pub fn send_udp_packet(&mut self, msg_type: MsgType, packet: UdpPacket, reliable: bool, custom_id: Option<u32>) {
+    pub fn send_udp_packet(&mut self, msg_type: MsgType, packet: UdpPacket, reliable: bool, custom_id: Option<u32>) -> io::Result<()> {
         self.next_msg_id += 1;
         let wrapped_data = &bincode::serialize(&packet).unwrap()[..];
         if reliable {
@@ -142,9 +147,10 @@ impl UdpConnection{
             });
         }
 
-        self.sock.send_to(wrapped_data, self.address).unwrap();
-        self.statistics.sent_bytes(wrapped_data.len() as u64);
+        let sent = self.sock.send_to(wrapped_data, self.address)?;
+        self.statistics.sent_bytes(sent as u64);
         self.last_message_sent = Some(Instant::now());
+        Ok(())
     }
 
     pub fn next_keep_alive(&mut self) -> Duration {

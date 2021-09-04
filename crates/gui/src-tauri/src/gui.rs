@@ -2,13 +2,15 @@ use std::sync::{Arc, Mutex, mpsc::Receiver};
 
 use mio::{Poll, Token, Waker};
 use mio_misc::{NotificationId, channel::{Sender, channel}, queue::NotificationQueue};
-use p2pthing_common::{message_type::InterthreadMessage, ui::UI};
+use p2pthing_common::{encryption::NetworkedPublicKey, message_type::InterthreadMessage, ui::UI};
 use tauri::{Manager, Window};
 
 pub struct Gui {
     ui_s: Sender<InterthreadMessage>,
     ui_r: Option<Receiver<InterthreadMessage>>,
 }
+
+struct GuiState(Arc<Mutex<Sender<InterthreadMessage>>>, NetworkedPublicKey);
 
 impl Gui {
     pub fn new() -> Gui {
@@ -25,16 +27,29 @@ impl Gui {
     }
 
     fn relay_messages(ui_r: Arc<Mutex<Receiver<InterthreadMessage>>>, window: Window) {
+        let w = window.clone();
+        let r = ui_r.clone();
         std::thread::spawn(move || {
-            let ui_r = ui_r.lock().unwrap();
+            let ui_r = r.lock().unwrap();
             loop {
                 let msg = ui_r.recv().unwrap();
-                if let Err(err) = window.emit("client-event", msg) {
+                
+                if let Err(err) = w.emit("client-event", msg) {
                     println!("Failed to relay event to gui: {}", err);
                 }
             }
         });
     }
+}
+
+#[tauri::command]
+fn send_event(state: tauri::State<GuiState>, event: InterthreadMessage) {
+    state.0.lock().unwrap().send(event).unwrap();
+}
+
+#[tauri::command]
+fn get_own_public_key(state: tauri::State<GuiState>) -> NetworkedPublicKey {
+    return state.1.clone();
 }
 
 
@@ -43,18 +58,29 @@ impl UI for Gui {
         return self.ui_s.clone();
     }
 
-    fn main_loop(&mut self, cm_s: Sender<p2pthing_common::message_type::InterthreadMessage>, own_public_key: p2pthing_common::encryption::NetworkedPublicKey) {
+    fn main_loop(&mut self, cm_s: Sender<p2pthing_common::message_type::InterthreadMessage>, own_public_key: NetworkedPublicKey) {
         let ui_r = self.ui_r.take().unwrap();
         let ui_r = Arc::new(Mutex::new(ui_r));
+        let state = GuiState(Arc::new(Mutex::new(cm_s)), own_public_key);
+
         tauri::Builder::default()
+            .manage(state)
             .setup(move |app| {
                 let main_window = app.get_window("main").unwrap();
-                Gui::relay_messages(ui_r.clone(), main_window.clone());
+
+                {
+                    let r = ui_r.clone();
+                    let win = main_window.clone();
+                    app.once_global("gui-started", move |_| {
+                        
+                        Gui::relay_messages(r.clone(), win.clone());
+                    });
+                }
 
                 println!("Starting tauri application");
                 Ok(())
             })
-            .invoke_handler(tauri::generate_handler![])
+            .invoke_handler(tauri::generate_handler![send_event, get_own_public_key])
             .run(tauri::generate_context!())
             .expect("error while running tauri application");
     }

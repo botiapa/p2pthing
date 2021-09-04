@@ -5,7 +5,7 @@ use mio::{Events, Interest, net::TcpStream};
 use p2pthing_common::{message_type::{InterthreadMessage, MsgType, msg_types}, ui::UIConn};
 use p2pthing_tui::tui::Tui;
 
-use crate::client::udp_connection::UdpConnectionState;
+use crate::client::{file_manager::FileManager, udp_connection::UdpConnectionState};
 
 use super::{ANNOUNCE_DELAY, CALL_DECAY, ConnectionManager, KEEP_ALIVE_DELAY, KEEP_ALIVE_DELAY_MIDCALL, RECONNECT_DELAY, RENDEZVOUS, STATS_UPDATE_DELAY, UDP_SOCKET, WAKER};
 
@@ -42,6 +42,9 @@ impl ConnectionManager {
             // Handle IO events
             self.handle_io_events(&events);
 
+            // Check for new requestable chunks
+            self.check_new_chunks();
+        
             // Send UI updates
             self.send_ui_updates();
         }
@@ -104,8 +107,8 @@ impl ConnectionManager {
     fn handle_interthread_messages(&mut self, r: &mut Receiver<InterthreadMessage>, running: &mut bool) {
         loop {
             match r.try_recv() {
-                Ok(data) => {
-                    match data {
+                Ok(msg) => {
+                    match msg {
                         InterthreadMessage::SendChatMessage(p, msg, custom_id) => 
                             match self.send_udp_message(Some(p), MsgType::ChatMessage, &msg_types::ChatMessage {msg,}, true, Some(custom_id)) {
                                 Ok(_) => {}
@@ -194,6 +197,16 @@ impl ConnectionManager {
                             *running = false;
                             return;
                         },
+                        InterthreadMessage::SendFiles(peer, files) => {
+                            match self.file_manager.send_files(files) {
+                                Ok(files) => {
+                                    if let Err(e) = self.send_udp_message(Some(peer), MsgType::SendFilesRequest, &msg_types::SendFilesRequest {files,}, true, None) {
+                                        self.ui_s.log_error(&format!("Error while trying to send a file send request: {}", e.to_string()))
+                                    }
+                                },
+                                Err(e) => self.ui_s.log_error(&format!("Error while trying to send a file send request: {}", e.to_string())),
+                            }
+                        }
                         _ => unreachable!()
                     }
                 }
@@ -261,6 +274,16 @@ impl ConnectionManager {
                             _ => unreachable!()
                         }
                     }
+                }
+            }
+        }
+    }
+
+    fn check_new_chunks(&mut self) {
+        if let Some(chunks) = self.file_manager.get_requested_chunks() {
+            for (peer, chunks) in chunks {
+                if let Err(e) = self.send_udp_message(Some(peer), MsgType::RequestFileChunks, &msg_types::RequestFileChunks {chunks,}, true, None) {
+                    self.ui_s.log_error(&format!("Error while trying to send a file chunk request: {}", e.to_string()))
                 }
             }
         }

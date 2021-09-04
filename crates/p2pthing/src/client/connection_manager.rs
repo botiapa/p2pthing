@@ -6,7 +6,7 @@ use mio_misc::channel::Sender;
 
 use mio::Token;
 
-use super::{audio::Audio, udp_connection::{UdpConnection, UdpConnectionState}};
+use super::{audio::Audio, file_manager::FileManager, udp_connection::{UdpConnection, UdpConnectionState}};
 
 mod event_loop;
 mod tcp_messages;
@@ -40,8 +40,9 @@ pub struct ConnectionManager {
     peers: Vec<Peer>,
     udp_connections: Vec<UdpConnection>,
     poll: Poll,
-    ui_s: Sender<InterthreadMessage>,
     cm_s: Sender<InterthreadMessage>,
+    ui_s: Sender<InterthreadMessage>,
+    file_manager: FileManager,
     encryption: Rc<AsymmetricEncryption>,
     /// Instant is when the call was sent
     calls_in_progress: Vec<(Call, Instant)>,
@@ -82,6 +83,7 @@ impl ConnectionManager {
         let mut udp_connections = Vec::new();
 
         let audio = Audio::new(ui_s.clone(), cm_s.clone());
+        let file_manager = FileManager::new(ui_s.clone());
 
         let udp_socket = Rc::new(udp_socket);
         let encryption = Rc::new(encryption);
@@ -101,11 +103,12 @@ impl ConnectionManager {
             peers: Vec::new(),
             udp_connections,
             poll,
-            audio,
-            ui_s,
             cm_s: cm_s.clone(),
+            ui_s,
+            file_manager,
             encryption,
             calls_in_progress: Vec::new(),
+            audio,
             last_stats_update: Instant::now()
         }
     }
@@ -126,14 +129,6 @@ impl ConnectionManager {
         });
         
         (cm_s, thr, key)
-    }
-
-    pub fn call(s: &Sender<InterthreadMessage>, public_key: NetworkedPublicKey) {
-        s.send(InterthreadMessage::Call(public_key)).unwrap();
-    }
-
-    pub fn send_chat_message(s: &Sender<InterthreadMessage>, public_key: NetworkedPublicKey, msg: String, custom_id: u32) {
-        s.send(InterthreadMessage::SendChatMessage(public_key, msg, custom_id)).unwrap();
     }
 
     pub fn quit(s: &Sender<InterthreadMessage>) {

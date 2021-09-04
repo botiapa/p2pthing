@@ -40,7 +40,7 @@ impl AsymmetricEncryption {
 
 /// A struct which only contains the public key part of the encryption key.
 /// Therefore being safe to advertise.
-#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+#[derive(Serialize, Debug, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub struct NetworkedPublicKey {
     n: String,
     e: String

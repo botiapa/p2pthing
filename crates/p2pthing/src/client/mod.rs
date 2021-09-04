@@ -5,3 +5,5 @@ pub mod udp_connection;
 
 #[cfg(feature = "audio")]
 pub mod audio;
+
+mod file_manager;
