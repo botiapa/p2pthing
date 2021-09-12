@@ -57,9 +57,6 @@ impl ConnectionManager {
             Some(MsgType::OpusPacket) => {
                 self.on_opus_packet(addr, &buf[1..]);
             }
-            Some(MsgType::SendFilesRequest) => {
-                self.on_send_file_request(addr, &buf[1..]);
-            }
             Some(MsgType::RequestFileChunks) => {
                 self.on_request_file_chunks(addr, &buf[1..]);
             }
@@ -105,19 +102,19 @@ impl ConnectionManager {
 
         let removed = conn.sent_messages.iter_mut().position(|msg| msg.packet.msg_id == id).map(|i| conn.sent_messages.remove(i));
         match removed {
-            Some(msg) => {
-                conn.statistics.new_ping(msg.sent.elapsed());
-                match msg.msg_type {
+            Some(packet) => {
+                conn.statistics.new_ping(packet.sent.elapsed());
+                match packet.msg_type {
                     MsgType::AnnounceSecret => {
                         conn.upgraded = true;
                         self.ui_s.log_info(&format!("Peer received secret: ({})", conn.associated_peer.as_ref().unwrap()));
                         self.check_punchthrough(addr);
                     }
                     MsgType::ChatMessage => {
+                        let id = self.msg_confirmations.remove(&packet.custom_id.unwrap()).unwrap();
                         self.ui_s.log_info(&format!("Chat message confirmed by: ({})", conn.associated_peer.as_ref().unwrap()));
-                        self.ui_s.send(InterthreadMessage::OnChatMessageReceived(msg.custom_id.unwrap())).unwrap();
+                        self.ui_s.send(InterthreadMessage::OnChatMessageReceived(id)).unwrap();
                     }
-                    MsgType::SendFilesRequest => {}
                     MsgType::RequestFileChunks => {}
                     _ => unreachable!()
                 }
@@ -139,9 +136,18 @@ impl ConnectionManager {
     }
 
     fn on_chat_message(&mut self, addr: SocketAddr, data: &[u8]) {
-        let chat_message: msg_types::ChatMessage = bincode::deserialize(data).unwrap();
+        let msg: msg_types::ChatMessage = bincode::deserialize(data).unwrap();
         let p = self.peers.iter().find(|p| p.udp_addr.unwrap() == addr).unwrap();
-        Tui::on_chat_message(&self.ui_s, p.clone(), chat_message.msg);
+        self.ui_s.send(InterthreadMessage::OnChatMessage(msg.clone())).unwrap();
+        
+        //TODO: Ability to accept or deny file download
+        if let Some(files) = msg.attachments {
+            for file in files {
+                if let Err(e) = self.file_manager.start_receiving_file(file.clone(), p.public_key.clone()) {
+                    self.ui_s.log_error(&format!("Failed preparing to receive file: {}", e));
+                }
+            }
+        }
     }
 
     fn on_opus_packet(&mut self, addr: SocketAddr, data: &[u8]) {
@@ -149,18 +155,6 @@ impl ConnectionManager {
         let p = self.peers.iter().find(|p| p.udp_addr.unwrap() == addr).unwrap();
 
         self.audio.decode_and_queue_packet(&data[..], p.public_key.clone());
-    }
-
-    fn on_send_file_request(&mut self, addr: SocketAddr, data: &[u8]) {
-        let data: msg_types::SendFilesRequest = bincode::deserialize(data).unwrap();
-        let p = self.peers.iter().find(|p| p.udp_addr.unwrap() == addr).unwrap();
-
-        //TODO: Ability to accept or deny file download
-        for file in data.files {
-            if let Err(e) = self.file_manager.start_receiving_file(file, p.public_key.clone()) {
-                self.ui_s.log_error(&format!("Failed preparing to receive file: {}", e));
-            }
-        }
     }
 
     fn on_request_file_chunks(&mut self, addr: SocketAddr, data: &[u8]) {
@@ -171,7 +165,7 @@ impl ConnectionManager {
         //TODO: Ability to accept or deny file download
         match self.file_manager.get_file_chunks(data) {
             Ok(chunks) => {
-                if let Err(e) = self.send_udp_message(Some(public_key), MsgType::FileChunks, &msg_types::FileChunks {chunks,}, false, None) {
+                if let Err(e) = self.send_udp_message(Some(public_key), MsgType::FileChunks, &msg_types::FileChunks {chunks,}, false, false) {
                     self.ui_s.log_error(&format!("Error while trying to send a file chunk request: {}", e.to_string()));
                 }
             },

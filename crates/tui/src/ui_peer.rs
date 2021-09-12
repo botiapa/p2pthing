@@ -1,20 +1,36 @@
 
-use p2pthing_common::{encryption::NetworkedPublicKey, message_type::Peer};
+use p2pthing_common::{encryption::NetworkedPublicKey, message_type::{Peer, PreparedFile, msg_types::ChatMessage}};
 
 use super::chat_input::ChatInput;
 
-pub struct ChatMessage {
-    pub author: Peer,
+pub struct ChatMessageUI {
+    pub author: NetworkedPublicKey,
+    pub recipient: NetworkedPublicKey,
     pub msg: String,
-    pub custom_id: Option<u32>,
+    pub id: String,
+    pub attachments: Option<Vec<PreparedFile>>,
     pub received: Option<bool>,
-    pub own: bool
+    pub own: bool,
+}
+
+impl ChatMessageUI {
+    pub fn from_chat_message(msg: ChatMessage, received: Option<bool>, own: bool) -> ChatMessageUI {
+        ChatMessageUI {
+            author: msg.author,
+            recipient: msg.recipient,
+            msg: msg.msg,
+            id: msg.id,
+            attachments: msg.attachments,
+            received,
+            own
+        }
+    }
 }
 
 pub struct UIPeer {
     inner: Peer,
     pub chat_input: ChatInput,
-    pub chat_messages: Vec<ChatMessage>
+    pub chat_messages: Vec<ChatMessageUI>
 }
 
 impl UIPeer {

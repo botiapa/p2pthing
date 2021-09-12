@@ -7,7 +7,7 @@ use p2pthing_common::{debug_message::{DebugMessage, DebugMessageType}, message_t
 
 use crate::tui::{ActiveBlock, TabIndex, Tui};
 
-use super::{popup::PopupReturn, ui_peer::{ChatMessage, UIPeer}};
+use super::{popup::PopupReturn, ui_peer::{ChatMessageUI, UIPeer}};
 use super::popup::call_popup::CallPopup;
 
 impl Tui {
@@ -79,20 +79,27 @@ impl Tui {
                     });
                     self.debug_messages_state.select(Some(self.debug_messages.len() - 1));
                 },
-                InterthreadMessage::OnChatMessage(p, msg) => {
-                    let ui_peer = self.peers.iter_mut().find(|peer| peer.get_public_key() == &p.public_key).unwrap();
-                    ui_peer.chat_messages.push(ChatMessage {
-                        author: p,
-                        msg,
-                        custom_id: None,
-                        received: None,
-                        own: false
-                    });
+                InterthreadMessage::OnChatMessage(msg) => {
+                    let own_public_key = self.own_public_key.as_ref().unwrap();
+                    let other_peer = match (&msg.author, &msg.recipient) {
+                        (author, _) if author != own_public_key => author,
+                        (_, recipient) if recipient != own_public_key => recipient,
+                        _ => panic!("Tried sending message to yourself.")
+                    };
+                    let ui_peer = self.peers.iter_mut().find(|peer| peer.get_public_key() == other_peer).unwrap();
+                    let own = &msg.author == self.own_public_key.as_ref().unwrap();
+                    let received = match own {
+                        true => Some(false),
+                        false => None,
+                    };
+                    ui_peer.chat_messages.push(
+                        ChatMessageUI::from_chat_message(msg, received, own)
+                    );
                 },
-                InterthreadMessage::OnChatMessageReceived(custom_id) => {
+                InterthreadMessage::OnChatMessageReceived(id) => {
                     for p in &mut self.peers {
                         for msg in &mut p.chat_messages {
-                            if msg.own && msg.custom_id.unwrap() == custom_id {
+                            if msg.own && msg.id == id {
                                 msg.received = Some(true);
                                 break;
                             }
@@ -137,20 +144,7 @@ impl Tui {
         let i = self.contact_list_state.selected().unwrap();
         let peer = self.peers.get_mut(i).unwrap();
         if !peer.chat_input.get_string().is_empty() {
-            self.cm_s.as_ref().unwrap().send(InterthreadMessage::SendChatMessage(peer.get_public_key().clone(), peer.chat_input.get_string(), self.next_msg_id)).unwrap();
-            peer.chat_messages.push(ChatMessage {
-                author: Peer {
-                    addr: None,
-                    udp_addr: None,
-                    sym_key: None,
-                    public_key: self.own_public_key.clone().unwrap(),
-                },
-                msg: peer.chat_input.get_string(),
-                custom_id: Some(self.next_msg_id),
-                received: Some(false),
-                own: true
-            });
-            self.next_msg_id += 1;
+            self.cm_s.as_ref().unwrap().send(InterthreadMessage::SendChatMessage(peer.get_public_key().clone(), peer.chat_input.get_string(), None)).unwrap();
             peer.chat_input.clear();
         }
     }

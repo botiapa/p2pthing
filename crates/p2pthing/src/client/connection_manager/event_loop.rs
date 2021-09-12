@@ -1,9 +1,12 @@
 use std::{io::{self, Read}, net::Shutdown, sync::mpsc::{self, Receiver}, thread, time::{Duration, Instant}};
 
+use base64::encode_config;
+use chrono::Utc;
 use io::ErrorKind;
 use mio::{Events, Interest, net::TcpStream};
 use p2pthing_common::{message_type::{InterthreadMessage, MsgType, msg_types}, ui::UIConn};
 use p2pthing_tui::tui::Tui;
+use sha2::{Digest, Sha256};
 
 use crate::client::{file_manager::FileManager, udp_connection::UdpConnectionState};
 
@@ -109,20 +112,40 @@ impl ConnectionManager {
             match r.try_recv() {
                 Ok(msg) => {
                     match msg {
-                        InterthreadMessage::SendChatMessage(p, msg, custom_id) => 
-                            match self.send_udp_message(Some(p), MsgType::ChatMessage, &msg_types::ChatMessage {msg,}, true, Some(custom_id)) {
+                        InterthreadMessage::SendChatMessage(p, msg, files) => {
+                            let files = match files {
+                                Some(files) => match self.file_manager.send_files(files) {
+                                    Ok(files) => Some(files),
+                                    Err(e) => {
+                                        self.ui_s.log_error(&format!("Error while trying to send a file send request: {}", e.to_string()));
+                                        continue;
+                                    },
+                                },
+                                None => None
+                            };
+                            let dt = Utc::now();
+                            let msg_id = [&msg.as_bytes(), &dt.timestamp().to_be_bytes()[..], &dt.timestamp_subsec_micros().to_be_bytes()[..]].concat();
+                            let msg_id = Sha256::digest(&msg_id);
+                            let msg_id = encode_config(msg_id, base64::URL_SAFE);
+                            
+                            let msg = msg_types::ChatMessage {author: self.encryption.get_public_key(), recipient: p.clone(), msg, attachments: files, id: msg_id, dt};
+                            
+                            self.msg_confirmations.insert(self.next_custom_id, msg.id.clone());
+                            self.ui_s.send(InterthreadMessage::OnChatMessage(msg.clone())).unwrap();
+                            match self.send_udp_message(Some(p), MsgType::ChatMessage, &msg, true, true) {
                                 Ok(_) => {}
                                 Err(e) => self.ui_s.log_error(&format!("Error while trying to send a chat message: {}", e.to_string()))
+                            }
                         },
                         InterthreadMessage::OpusPacketReady(data) => {
                             for conn in &mut self.udp_connections {
                                 if conn.upgraded && conn.associated_peer.is_some() {
-                                    conn.send_udp_message(MsgType::OpusPacket, &data, false, None) // TODO: Indexing packets
+                                    conn.send_udp_message(MsgType::OpusPacket, &data, false, None).unwrap() // TODO: Indexing packets
                                 }
                             }
                         }
                         InterthreadMessage::AudioDataReadyToBeProcessed(data) => self.audio.process_and_send_packet(data),
-                        InterthreadMessage::OnChatMessage(p, msg) => Tui::on_chat_message(&self.ui_s, p, msg),
+                        InterthreadMessage::OnChatMessage(msg) => self.ui_s.send(InterthreadMessage::OnChatMessage(msg)).unwrap(),
                         InterthreadMessage::ConnectToServer() => {
                             self.rendezvous_socket = TcpStream::connect(self.rendezvous_ip).unwrap();
                             self.poll.registry().register(&mut self.rendezvous_socket, RENDEZVOUS, Interest::READABLE).unwrap();
@@ -164,7 +187,7 @@ impl ConnectionManager {
                             self.ui_s.log_info(&format!("Denied call from peer ({};{})", p, conn.address));
                         }
                         InterthreadMessage::Call(p) => {
-                            let peer = self.peers.iter().find(|peer| peer.public_key == p).unwrap();
+                            let peer = self.peers.iter().find(|peer| peer.public_key == p).unwrap(); //FIXME: Unwrap err here
                             if peer.udp_addr.is_some() {
                                 self.ui_s.log_warning(&format!("Tried to call a peer which is already connected {}", p));
                                 continue;
@@ -196,16 +219,6 @@ impl ConnectionManager {
                             }
                             *running = false;
                             return;
-                        },
-                        InterthreadMessage::SendFiles(peer, files) => {
-                            match self.file_manager.send_files(files) {
-                                Ok(files) => {
-                                    if let Err(e) = self.send_udp_message(Some(peer), MsgType::SendFilesRequest, &msg_types::SendFilesRequest {files,}, true, None) {
-                                        self.ui_s.log_error(&format!("Error while trying to send a file send request: {}", e.to_string()))
-                                    }
-                                },
-                                Err(e) => self.ui_s.log_error(&format!("Error while trying to send a file send request: {}", e.to_string())),
-                            }
                         }
                         _ => unreachable!()
                     }
@@ -282,7 +295,7 @@ impl ConnectionManager {
     fn check_new_chunks(&mut self) {
         if let Some(chunks) = self.file_manager.get_requested_chunks() {
             for (peer, chunks) in chunks {
-                if let Err(e) = self.send_udp_message(Some(peer), MsgType::RequestFileChunks, &msg_types::RequestFileChunks {chunks,}, true, None) {
+                if let Err(e) = self.send_udp_message(Some(peer), MsgType::RequestFileChunks, &msg_types::RequestFileChunks {chunks,}, true, false) {
                     self.ui_s.log_error(&format!("Error while trying to send a file chunk request: {}", e.to_string()))
                 }
             }
@@ -291,13 +304,16 @@ impl ConnectionManager {
 
     fn send_ui_updates(&mut self) {
         if self.last_stats_update.elapsed() > STATS_UPDATE_DELAY {
-            let mut stats = vec![];
+            let transfer_stats = self.file_manager.transfer_statistics.clone();
+            let mut conn_stats = vec![];
             for c in &mut self.udp_connections {
                 if let Some(p) = &c.associated_peer {
-                    stats.push((p.clone(), c.statistics.clone()));
+                    conn_stats.push((p.clone(), c.statistics.clone()));
                 }
             }
-            self.ui_s.send(InterthreadMessage::ConnectionStatistics(stats)).unwrap();
+            
+            self.ui_s.send(InterthreadMessage::ConnectionStatistics(conn_stats)).unwrap();
+            self.ui_s.send(InterthreadMessage::TransferStatistics(transfer_stats)).unwrap();
             self.last_stats_update = Instant::now();
         }
     }

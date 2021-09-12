@@ -1,7 +1,7 @@
 use std::{io, net::SocketAddr, rc::Rc, time::{Duration, Instant}};
 
 use mio::net::UdpSocket;
-use p2pthing_common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption}, message_type::{MsgEncryption, MsgType, UdpPacket}, statistics::Statistics};
+use p2pthing_common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption}, message_type::{MsgEncryption, MsgType, UdpPacket}, statistics::ConnectionStatistics};
 use serde::Serialize;
 
 use super::connection_manager::{RELIABLE_MESSAGE_DELAY, KEEP_ALIVE_DELAY_MIDCALL, ANNOUNCE_DELAY, KEEP_ALIVE_DELAY, UdpHolder};
@@ -34,7 +34,7 @@ pub struct UdpConnection {
     /// Is a symmetrically encrypted tunnel created?
     pub upgraded: bool,
     pub encryption: Rc<AsymmetricEncryption>,
-    pub statistics: Statistics
+    pub statistics: ConnectionStatistics
 }
 
 impl UdpConnection{
@@ -52,14 +52,14 @@ impl UdpConnection{
             received_messages: vec![],
             upgraded: false,
             encryption,
-            statistics: Statistics::new()
+            statistics: ConnectionStatistics::new()
         }
     }
 
-    pub fn send_udp_message<T: ?Sized>(&mut self, t: MsgType, msg: &T, reliable: bool, custom_id: Option<u32>) where T: Serialize {
+    pub fn send_udp_message<T: ?Sized>(&mut self, t: MsgType, msg: &T, reliable: bool, custom_id: Option<u32>) -> Result<(), String> where T: Serialize {
         match self.upgraded {
-            true => self.send_udp_message_with_asymmetric_key(t, msg, reliable, custom_id).unwrap(),
-            false => self.send_udp_message_with_public_key(t, msg, reliable, custom_id).unwrap()
+            true => self.send_udp_message_with_asymmetric_key(t, msg, reliable, custom_id),
+            false => self.send_udp_message_with_public_key(t, msg, reliable, custom_id)
         }
     }
 
@@ -193,7 +193,7 @@ impl UdpConnection{
     }
 
     pub fn send_confirmation(&mut self, id: u32) {
-        self.send_udp_message(MsgType::MessageConfirmation, &id, false, None);
+        self.send_udp_message(MsgType::MessageConfirmation, &id, false, None).unwrap();
     }
 
     pub fn decrypt(&self, packet: UdpPacket) -> Result<Vec<u8>, ()> {

@@ -2,17 +2,22 @@ use std::{collections::HashMap, net::SocketAddr, fmt::Display};
 use num_derive::{FromPrimitive, ToPrimitive};
 use serde::{Serialize, Deserialize};
 
-use crate::statistics::Statistics;
+use crate::statistics::{ConnectionStatistics, TransferStatistics};
 
-use self::msg_types::{FileChunks, RequestFileChunks};
+use self::msg_types::{ChatMessage, FileChunks, RequestFileChunks};
 
 use super::{debug_message::DebugMessageType, encryption::{NetworkedPublicKey, SymmetricEncryption}};
 
+pub type FileName = String;
+pub type MessageId = String;
+
 #[derive(Serialize, Deserialize, Clone)]
 pub enum InterthreadMessage {
-    SendChatMessage(NetworkedPublicKey, String, u32),
-    OnChatMessage(Peer, String),
-    OnChatMessageReceived(u32), //u32 is the custom_id
+    SendChatMessage(NetworkedPublicKey, String, Option<Vec<FileName>>),
+    /// - **From CM to UI:** Received a message either from another peer, or from themselves
+    OnChatMessage(ChatMessage),
+    /// - **From CM to UI:** Notify UI that a message has been received by the other peer. String is the id of the message.
+    OnChatMessageReceived(String),
     AnnounceResponse(Vec<Peer>),
     CallAccepted(NetworkedPublicKey),
     CallDenied(NetworkedPublicKey),
@@ -24,7 +29,10 @@ pub enum InterthreadMessage {
     AudioDataReadyToBeProcessed(Vec<f32>),
     DebugMessage(String, DebugMessageType),
     ConnectToServer(),
-    ConnectionStatistics(Vec<(NetworkedPublicKey, Statistics)>),
+    /// - **From CM to UI:** Send connection statistics for each peer
+    ConnectionStatistics(Vec<(NetworkedPublicKey, ConnectionStatistics)>),
+    /// - **From CM to UI:** Send transfer statistics for each file
+    TransferStatistics(HashMap<FileId, TransferStatistics>),
     // AUDIO
     AudioChangeInputDevice(String),
     AudioChangeOutputDevice(String),
@@ -34,13 +42,12 @@ pub enum InterthreadMessage {
     AudioChangeMuteState(bool),
     AudioChangeDenoiserState(bool),
     // FILES
-    /// - **From client to CM:** Start sending the specified files to a peer.
     /// - **From CM to FM:** Prepare the files for uploading
-    SendFiles(NetworkedPublicKey, Vec<String>),
+    SendFiles(NetworkedPublicKey, Vec<FileName>),
     /// - **From CM to FM:** Prepare for receiving the file
-    ReceiveFiles(Vec<SplitFile>, NetworkedPublicKey),
+    ReceiveFiles(Vec<PreparedFile>, NetworkedPublicKey),
     /// - **From FM to CM:** Files ready for upload
-    FilesReady(NetworkedPublicKey, Vec<SplitFile>),
+    FilesReady(NetworkedPublicKey, Vec<PreparedFile>),
     /// - **From CM to FM:** Load the specified file data chunks and then notify CM to forward it to the peer
     GetFileChunks(RequestFileChunks, NetworkedPublicKey),
     /// - **From FM to CM:** Notify CM about loaded file data chunks
@@ -65,9 +72,8 @@ pub enum MsgType {
     AnnounceRequest=7,
     MessageConfirmation=9,
     OpusPacket=10,
-    SendFilesRequest=11,
-    RequestFileChunks=12,
-    FileChunks=13
+    RequestFileChunks=11,
+    FileChunks=12
 }
 
 #[derive(Serialize, Deserialize)]
@@ -132,10 +138,11 @@ pub type FileId = String;
 
 /// A file which has been split into transmittable chunks
 #[derive(Clone, Serialize, Deserialize)]
-pub struct SplitFile {
+pub struct PreparedFile {
     /// This is a base64 value that is obtained by hashing the filename and file size
     pub file_id: FileId,
     pub file_name: String,
+    pub file_extension: String,
     pub total_length: u64,
 }
 
@@ -158,15 +165,14 @@ pub struct FileDataChunk {
     pub data: Vec<u8>
 }
 
-/// A single chunk of a file
-
 pub mod msg_types {
     use std::net::SocketAddr;
 
+    use chrono::{DateTime, Utc};
     use serde::{Serialize, Deserialize};
     use crate::encryption::NetworkedPublicKey;
 
-    use super::{FileChunk, FileDataChunk, SplitFile};
+    use super::{FileChunk, FileDataChunk, PreparedFile};
     
     /// The server announced itself to the client, requesting an announcement.
     #[derive(Serialize, Deserialize)]
@@ -200,9 +206,14 @@ pub mod msg_types {
         pub response: bool
     }
 
-    #[derive(Serialize, Deserialize)]
+    #[derive(Clone, Serialize, Deserialize)]
     pub struct ChatMessage {
+        pub id: String,
+        pub author: NetworkedPublicKey,
+        pub recipient: NetworkedPublicKey,
         pub msg: String,
+        pub attachments: Option<Vec<PreparedFile>>,
+        pub dt: DateTime<Utc>
     }
 
     #[derive(Serialize, Deserialize)]
@@ -218,11 +229,6 @@ pub mod msg_types {
     #[derive(Serialize, Deserialize)]
     pub struct ReliableMessageReceived {
         pub id: u32
-    }
-
-    #[derive(Serialize, Deserialize)]
-    pub struct SendFilesRequest {
-        pub files: Vec<SplitFile>,
     }
 
     #[derive(Clone, Serialize, Deserialize)]

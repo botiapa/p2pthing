@@ -1,6 +1,6 @@
 use std::{io::Stdout, time::Duration};
 
-use p2pthing_common::{debug_message::DebugMessageType, message_type::Peer, ui::{CHOOSABLE_KBITS, CallStatus}};
+use p2pthing_common::{debug_message::DebugMessageType, encryption::NetworkedPublicKey, ui::{CHOOSABLE_KBITS, CallStatus}};
 use tui::{Frame, backend::CrosstermBackend, layout::{Constraint, Direction, Layout, Rect}, style::{Color, Modifier, Style}, symbols::DOT, text::{Span, Spans, Text}, widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Tabs, Wrap}};
 
 use crate::tui::{ActiveBlock, Tui};
@@ -213,11 +213,11 @@ impl Tui{
         let p = self.peers.get(selected_contact).unwrap();
 
         let mut chat_items: Vec<ListItem> = Vec::new();
-        let mut last_author: Option<Peer> = None;
+        let mut last_author: Option<NetworkedPublicKey> = None;
         for m in &p.chat_messages {
             match &last_author {
                 Some(last_author) if last_author == &m.author => {},
-                _ => chat_items.push(ListItem::new(format!("{}: \n", m.author.public_key)).style(Style::default().add_modifier(Modifier::BOLD)))
+                _ => chat_items.push(ListItem::new(format!("{}: \n", m.author)).style(Style::default().add_modifier(Modifier::BOLD)))
             }
             last_author = Some(m.author.clone());
 

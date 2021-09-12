@@ -37,7 +37,7 @@ impl ConnectionManager {
     }
 
     /// Send a UDP packet which optionally can be reliable
-    pub fn send_udp_message<T: ?Sized>(&mut self, public_key: Option<NetworkedPublicKey>, t: MsgType, msg: &T, reliable: bool, custom_id: Option<u32>) -> Result<(), &'static str> where T: Serialize  {
+    pub fn send_udp_message<T: ?Sized>(&mut self, public_key: Option<NetworkedPublicKey>, t: MsgType, msg: &T, reliable: bool, custom_id: bool) -> Result<(), String> where T: Serialize  {
         let rendezvous_ip = self.rendezvous_ip.clone();
         let conn = match public_key {
             Some(public_key) => {
@@ -48,13 +48,20 @@ impl ConnectionManager {
                     Some(conn) => conn,
                     None => {
                         self.ui_s.log_error(&format!("Cannot find udp connection with public key: ({})", public_key));
-                        return Err("Cannot find udp connection");
+                        return Err("Cannot find udp connection".into());
                     }
                 }
             }
             None => self.udp_connections.iter_mut().find(|c| c.address == rendezvous_ip).unwrap()
         };
-        conn.send_udp_message(t, msg, reliable, custom_id);
+        match custom_id {
+            true => {
+                conn.send_udp_message(t, msg, reliable, Some(self.next_custom_id))?;
+                self.next_custom_id += 1;
+            },
+            false => conn.send_udp_message(t, msg, reliable, None)?,
+        }
+        
         Ok(())
     }
 }

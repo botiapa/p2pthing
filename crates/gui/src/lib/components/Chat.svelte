@@ -13,19 +13,14 @@
 		if (event.key !== "Enter" || msg_input.trim() == "") return;
 		await invoke("send_event", {
 			event: {
-				SendChatMessage: [$data.selected_peer?.public_key, msg_input, $data.next_msg_id],
+				SendChatMessage: [$data.selected_peer?.public_key, msg_input, []],
 			},
 		});
-
-		$data.selected_peer?.messages.push(
-			new ChatMessageClass($data.own_public_key, msg_input, $data.next_msg_id, false)
-		);
-		$data;
-		$data.next_msg_id++;
-		data.set($data);
 		msg_input = "";
 		event.preventDefault(); // No need to `return false;`.
 	}
+
+	$: console.log("Messages: ", $data.selected_peer?.messages);
 
 	let container;
 </script>

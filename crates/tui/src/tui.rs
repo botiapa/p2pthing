@@ -5,7 +5,7 @@ use mio::{Events, Poll, Token, Waker};
 use mio_misc::{NotificationId, channel::{Sender, channel}, queue::NotificationQueue};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
-use p2pthing_common::{debug_message::DebugMessage, encryption::NetworkedPublicKey, message_type::{InterthreadMessage, Peer}, statistics::Statistics, ui::{CallStatusHolder, UI, UIConn}};
+use p2pthing_common::{debug_message::DebugMessage, encryption::NetworkedPublicKey, message_type::InterthreadMessage, statistics::ConnectionStatistics, ui::{CallStatusHolder, UI, UIConn}};
 use tui::{Terminal, backend::CrosstermBackend, widgets::ListState};
 
 use crate::{popup::Popup, ui_peer::UIPeer};
@@ -58,9 +58,8 @@ pub struct Tui {
     pub(crate) is_active: bool,
     pub(crate) own_public_key: Option<NetworkedPublicKey>,
     pub(crate) calls: Vec<CallStatusHolder>,
-    pub(crate) next_msg_id: u32,
     pub(crate) active_popup: Option<Box<dyn Popup>>,
-    pub(crate) conn_stats: Vec<(NetworkedPublicKey, Statistics)>,
+    pub(crate) conn_stats: Vec<(NetworkedPublicKey, ConnectionStatistics)>,
     /// Whether the debug panel is visible above the chat messages
     pub(crate) debug_visible: bool
 }
@@ -103,16 +102,10 @@ impl Tui {
             is_active: false,
             own_public_key: None,
             calls: vec![],
-            next_msg_id: 0,
             active_popup: None,
             conn_stats: vec![],
             debug_visible: false
         }
-    }
-
-    pub fn on_chat_message(s: &Sender<InterthreadMessage>, peer: Peer, msg: String) {
-        s.log_info(&format!("Received chat message from: ({})", peer.public_key));
-        s.send(InterthreadMessage::OnChatMessage(peer, msg)).unwrap();
     }
 }
 

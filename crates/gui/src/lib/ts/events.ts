@@ -1,4 +1,12 @@
-import { CallStatus, ChatMessage, GuiData, UIPeer } from "./interfaces";
+import {
+	CallStatus,
+	ChatMessage,
+	ChatMessageUI,
+	GuiData,
+	NetworkedPublicKey,
+	TransferStatistics,
+	UIPeer,
+} from "./interfaces";
 
 type Handler = (data: GuiData, event_data: any) => GuiData | void;
 export class EventHandler {
@@ -34,7 +42,8 @@ export function build_event_handler(): EventHandler {
 		.add_handler("OnChatMessageReceived", on_chat_message_received)
 		.add_handler("AudioNewInputDevices", on_audio_new_input_devices)
 		.add_handler("AudioNewOutputDevices", on_audio_new_output_devices)
-		.add_handler("ConnectionStatistics", on_connection_statistics);
+		.add_handler("ConnectionStatistics", on_connection_statistics)
+		.add_handler("TransferStatistics", on_transfer_statistics);
 	return event_handler;
 }
 
@@ -77,19 +86,24 @@ function on_call_accepted(data: GuiData, public_key: any) {
 	return data;
 }
 
-function on_chat_message(data: GuiData, ev: any[]) {
-	let msg_peer: UIPeer = ev[0];
-	let msg: string = ev[1];
+function on_chat_message(data: GuiData, msg: ChatMessage) {
+	let other_peer: NetworkedPublicKey;
+	if (!NetworkedPublicKey.equals(msg.author, data.own_public_key)) other_peer = msg.author;
+	else if (!NetworkedPublicKey.equals(msg.recipient, data.own_public_key))
+		other_peer = msg.recipient;
+	else console.error("Tried sending message to yourself.");
+	let p = data.peers.find((p) => NetworkedPublicKey.equals(p.public_key, other_peer));
+	p.messages.push(
+		new ChatMessageUI(msg, NetworkedPublicKey.equals(msg.recipient, data.own_public_key))
+	);
 
-	let p = data.peers.find((p) => p.public_key.equals(new UIPeer(msg_peer).public_key));
-	p.messages.push(new ChatMessage(p.public_key, msg));
 	return data;
 }
 
-function on_chat_message_received(data: GuiData, custom_id: number) {
+function on_chat_message_received(data: GuiData, id: string) {
 	for (const peer of data.peers) {
 		for (const msg of peer.messages) {
-			if (msg.custom_id === custom_id) msg.received = true;
+			if (msg.id === id) msg.received = true;
 		}
 	}
 
@@ -101,3 +115,11 @@ function on_audio_new_input_devices(data: GuiData, debug_data: any) {}
 function on_audio_new_output_devices(data: GuiData, debug_data: any) {}
 
 function on_connection_statistics(data: GuiData, debug_data: any) {}
+
+function on_transfer_statistics(
+	data: GuiData,
+	transfer_statistics: Map<String, TransferStatistics>
+) {
+	data.transfer_statistics = transfer_statistics;
+	return data;
+}

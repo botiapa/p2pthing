@@ -1,20 +1,19 @@
-use std::{collections::HashMap, convert::TryInto, env, fs::{self, File, Metadata}, io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write}, ops::{Deref, DerefMut}, path::{Path, PathBuf}, sync::{Arc, mpsc::{self, Receiver}}, thread, time::Instant};
-use mio::{Events, Poll, Token, Waker};
-use mio_misc::{NotificationId, channel::{Sender, channel}, queue::NotificationQueue};
+use std::{collections::HashMap, convert::TryInto, env, ffi::OsStr, fs::{self, File, Metadata}, io::{self, BufReader, Read, Seek, SeekFrom}, path::{Path, PathBuf}, time::{Instant, SystemTime}};
+use mio_misc::{channel::Sender};
 use sha2::{Digest, Sha256};
-use base64::{encode_config};
+use base64::encode_config;
 
-use p2pthing_common::{encryption::NetworkedPublicKey, message_type::{FileChunk, FileDataChunk, FileId, InterthreadMessage, SplitFile, msg_types::{FileChunks, RequestFileChunks}}, ui::UIConn};
+use p2pthing_common::{encryption::NetworkedPublicKey, message_type::{FileChunk, FileDataChunk, FileId, InterthreadMessage, PreparedFile, msg_types::{FileChunks, RequestFileChunks}}, statistics::TransferStatistics, ui::UIConn};
 
 mod chunk_writer;
 use chunk_writer::ChunkWriter;
 
 pub struct FileManager {
+    pub transfer_statistics: HashMap<FileId, TransferStatistics>,
     open_files: HashMap<FileId, OpenFile>,
     /// Map the files to a vector where the index is the chunkindex and the value is whether it has been received.
     receiving_chunks: HashMap<FileId, Vec<ReceivableChunk>>,
     file_senders: HashMap<FileId, NetworkedPublicKey>,
-    transfer_statistics: HashMap<FileId, TransferStatistics>,
     read_buffer: Vec<u8>,
     ui_s: Sender<InterthreadMessage>,
     /// Requests that haven't been sent to their respective peers
@@ -47,23 +46,6 @@ enum FileType {
     Writer(ChunkWriter)
 }
 
-struct TransferStatistics {
-    started: Instant,
-    bytes_written: usize,
-    /// Can be more than the file size if more than one peer requests the file.
-    bytes_read: usize,
-}
-
-impl TransferStatistics {
-    pub fn new() -> Self {
-        Self {
-            started: Instant::now(),
-            bytes_written: 0,
-            bytes_read: 0,
-        }
-    }
-}
-
 
 /// Max size of a single packet in bytes
 const CHUNK_SIZE: usize = 1 * 1000;
@@ -75,18 +57,18 @@ const REQUESTED_CHUNK_COUNT: usize = 50;
 impl FileManager {
     pub fn new(ui_s: Sender<InterthreadMessage>) -> FileManager {
         FileManager {
+            transfer_statistics: HashMap::new(),
             open_files: HashMap::new(),
             receiving_chunks: HashMap::new(),
             file_senders: HashMap::new(),
-            transfer_statistics: HashMap::new(),
-            ui_s,
             read_buffer: vec![0u8; CHUNK_SIZE],
+            ui_s,
             new_requests: HashMap::new(),
         }
     }
 
-    /// Split files, prepare for uploading
-    pub fn send_files(&mut self, filenames: Vec<String>) -> io::Result<Vec<SplitFile>> {
+    /// Prepare files for uploading
+    pub fn send_files(&mut self, filenames: Vec<String>) -> io::Result<Vec<PreparedFile>> {
         let mut split_files = Vec::new();
         for filename in filenames {
             split_files.push(self.start_sending_file(filename)?);
@@ -94,9 +76,11 @@ impl FileManager {
         return Ok(split_files);
     }
 
-    pub fn start_sending_file(&mut self, filename: String) -> io::Result<SplitFile> {
+    pub fn start_sending_file(&mut self, filename: String) -> io::Result<PreparedFile> {
         let path = Path::new(&filename);
+        let path = PathBuf::from(path);
         let filename = path.file_name().unwrap().to_str().unwrap();
+        let extension = path.extension().unwrap_or(OsStr::new("")).to_string_lossy().to_string();
 
         let metadata = fs::metadata(path.clone())?;
         let total_length = metadata.len();
@@ -108,17 +92,18 @@ impl FileManager {
         // If the file is not already opened, then open it
         // TODO: What if the size of the file changes (someone else writes to it). Because then the hash would change.
         if !self.open_files.contains_key(&file_id) {
-            self.open_file(&file_id, path, false, None)?;
+            self.open_file(&file_id, path.clone().as_path(), false, None)?;
         }
 
-        return Ok(SplitFile {
+        return Ok(PreparedFile {
             file_id,
             file_name: filename.to_string(),
+            file_extension: extension,
             total_length,
         })
     }
 
-    pub fn start_receiving_file(&mut self, file: SplitFile, sender: NetworkedPublicKey) -> io::Result<()> {
+    pub fn start_receiving_file(&mut self, file: PreparedFile, sender: NetworkedPublicKey) -> io::Result<()> {
         let chunk_count: usize = file.total_length as usize / CHUNK_SIZE + 1;
         let original_name = PathBuf::from(file.file_name.clone());
         let download_path = env::current_dir().unwrap().join(PathBuf::from(DOWNLOADS_FOLDER)).join(file.file_id.clone()).with_extension(original_name.extension().unwrap());
@@ -253,11 +238,12 @@ impl FileManager {
 
                 // TODO: Properly notify UI
                 let stats = self.transfer_statistics.remove(&file).unwrap();
-                let elapsed = Instant::now() - stats.started;
                 
-                let secs = elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 * 1e-9;
-                let mbs = open_file.metadata.len() as f64 / 1000f64 / 1000f64  / secs ;
-                self.ui_s.log_info(&format!("Finished file ({}) in {}ms achieving {:.} MB/s", &file[0..10], elapsed.as_millis(), mbs));
+                if let Ok(elapsed) = stats.started.elapsed() {
+                    let secs = elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 * 1e-9;
+                    let mbs = open_file.metadata.len() as f64 / 1000f64 / 1000f64  / secs ;
+                    self.ui_s.log_info(&format!("Finished file ({}) in {}ms achieving {:.} MB/s", &file[0..10], elapsed.as_millis(), mbs));
+                }
 
                 drop(open_file);
             }

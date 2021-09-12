@@ -2,7 +2,7 @@ export class GuiData {
 	peers: UIPeer[] = [];
 	selected_peer?: UIPeer;
 	own_public_key?: NetworkedPublicKey;
-	next_msg_id: number = 0;
+	transfer_statistics: Map<String, TransferStatistics> = new Map();
 
 	/**
 		Find the specified peer
@@ -19,7 +19,7 @@ export interface IPeer {
 export class UIPeer implements IPeer {
 	public_key: NetworkedPublicKey;
 	call_status: CallStatus = CallStatus.None;
-	messages: ChatMessage[] = [];
+	messages: ChatMessageUI[] = [];
 
 	constructor(p: IPeer) {
 		this.public_key = new NetworkedPublicKey(p.public_key);
@@ -47,6 +47,10 @@ export class NetworkedPublicKey implements INetworkedPublicKey {
 	equals(other: NetworkedPublicKey): boolean {
 		return this.e == other.e && this.n == other.n;
 	}
+
+	static equals(that: NetworkedPublicKey, other: NetworkedPublicKey): boolean {
+		return that.e == other.e && that.n == other.n;
+	}
 }
 
 export enum CallStatus {
@@ -58,21 +62,49 @@ export enum CallStatus {
 	WaitingForAnswer,
 }
 
+export interface IPreparedFile {
+	file_id: string;
+	file_name: string;
+	file_extension: string;
+	total_length: number;
+}
+
 export class ChatMessage {
+	id: string;
 	author: NetworkedPublicKey;
-	contents: string;
-	custom_id?: number;
-	received?: boolean;
+	recipient: NetworkedPublicKey;
+	msg: string;
+	attachments: IPreparedFile[] | undefined;
+	dt: Date;
 
 	constructor(
-		author: NetworkedPublicKey,
-		contents: string,
-		custom_id?: number,
-		received?: boolean
+		id: string,
+		author: INetworkedPublicKey,
+		recipient: INetworkedPublicKey,
+		msg: string,
+		attachments: IPreparedFile[],
+		dt: Date
 	) {
-		this.author = author;
-		this.contents = contents;
-		this.custom_id = custom_id;
+		this.id = id;
+		this.author = new NetworkedPublicKey(author);
+		this.recipient = new NetworkedPublicKey(recipient);
+		this.msg = msg;
+		this.attachments = attachments;
+		this.dt = dt;
+	}
+}
+
+export class ChatMessageUI extends ChatMessage {
+	received: boolean;
+
+	constructor(msg: ChatMessage, received: boolean) {
+		super(msg.id, msg.author, msg.recipient, msg.msg, msg.attachments, msg.dt);
 		this.received = received;
 	}
+}
+
+export class TransferStatistics {
+	started: Date;
+	bytes_written: number;
+	bytes_read: number;
 }

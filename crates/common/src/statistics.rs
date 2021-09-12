@@ -1,11 +1,29 @@
-use std::time::{Duration, Instant, SystemTime, SystemTimeError};
+use std::time::{Duration, SystemTime, SystemTimeError};
 
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
 const MAX_VEC_LENGTH: usize = 30;
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct Statistics {
+pub struct TransferStatistics {
+    pub started: SystemTime,
+    pub bytes_written: usize,
+    /// Can be more than the file size if more than one peer requests the file.
+    pub bytes_read: usize,
+}
+
+impl TransferStatistics {
+    pub fn new() -> Self {
+        Self {
+            started: SystemTime::now(),
+            bytes_written: 0,
+            bytes_read: 0,
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ConnectionStatistics {
     total_sent_bytes: u64,
     total_read_bytes: u64,
     sent_bytes: Vec<(SystemTime, u64)>,
@@ -13,31 +31,11 @@ pub struct Statistics {
     pings: Vec<Duration>
 }
 
-struct InstantWrapper {}
-
-pub fn serialize<S>(instant: &Instant, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    let duration = instant.elapsed();
-    duration.serialize(serializer)
-}
-
-pub fn deserialize<'de, D>(deserializer: D) -> Result<Instant, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let duration = Duration::deserialize(deserializer)?;
-    let now = Instant::now();
-    let instant = now.checked_sub(duration).ok_or_else(|| panic!("Err checked_add"))?;
-    Ok(instant)
-}
-
 // TODO: Optimize
 // TODO: Test if the stats are actually accurate. I have a feeling that the average calculation is not right.
-impl Statistics {
+impl ConnectionStatistics {
     pub fn new() -> Self {
-        Statistics {
+        ConnectionStatistics {
             total_sent_bytes: 0,
             total_read_bytes: 0,
             sent_bytes: vec![],

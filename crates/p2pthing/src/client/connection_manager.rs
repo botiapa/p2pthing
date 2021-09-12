@@ -1,7 +1,7 @@
 use mio_misc::{NotificationId, channel::channel, queue::NotificationQueue};
 use mio::{Interest, Poll, Waker, net::{TcpStream, UdpSocket}};
-use p2pthing_common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption}, message_type::{InterthreadMessage, MsgType, Peer, UdpPacket, msg_types::Call}};
-use std::{net::SocketAddr, rc::Rc, str::FromStr, sync::{Arc}, thread::{self, JoinHandle}, time::{Duration, Instant}};
+use p2pthing_common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption}, message_type::{InterthreadMessage, MsgType, Peer, UdpPacket, msg_types::{Call, ChatMessage}}};
+use std::{collections::HashMap, net::SocketAddr, rc::Rc, str::FromStr, sync::{Arc}, thread::{self, JoinHandle}, time::{Duration, Instant}};
 use mio_misc::channel::Sender;
 
 use mio::Token;
@@ -47,8 +47,11 @@ pub struct ConnectionManager {
     /// Instant is when the call was sent
     calls_in_progress: Vec<(Call, Instant)>,
     audio: Audio,
-    // The last instant when the connection statistics were sent to the UI
-    last_stats_update: Instant
+    /// The last instant when the connection statistics were sent to the UI
+    last_stats_update: Instant,
+    next_custom_id: u32,
+    /// Messages waiting for confirmation. The U32 is the packet_id, while the String is the id of the message.
+    msg_confirmations: HashMap<u32, String>
 }
 
 pub struct UdpHolder {
@@ -109,7 +112,9 @@ impl ConnectionManager {
             encryption,
             calls_in_progress: Vec::new(),
             audio,
-            last_stats_update: Instant::now()
+            last_stats_update: Instant::now(),
+            next_custom_id: 0,
+            msg_confirmations: HashMap::new(),
         }
     }
 
