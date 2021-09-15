@@ -10,7 +10,7 @@
 	function convertFileSrc(filePath: string): string {
 		return navigator.userAgent.includes("Windows")
 			? `https://asset.localhost/${filePath}`
-			: `asset://${filePath}`;
+			: `asset:/${filePath}`;
 	}
 
 	async function convert_attachment_file_name(fileName: string, ext: string): Promise<string> {
@@ -20,7 +20,7 @@
 		return Promise.resolve(convertFileSrc(full_path));
 	}
 
-	$: console.log(`asd: `, $data.transfer_statistics);
+	$: console.log(`transfers: `, $data.transfer_statistics);
 </script>
 
 <template lang="pug">
@@ -31,11 +31,12 @@
         +if("message.attachments")
             +each('message.attachments as file (file.file_id)')
                 p {file.file_name}
-                +await('convert_attachment_file_name(file.file_id, file.file_extension) then path')
-                    img.attachment(src="{path}")
-                    p Bytes read {$data.transfer_statistics[file.file_id]?.bytes_read}
-                    p Bytes written {$data.transfer_statistics[file.file_id]?.bytes_written}
-                    p Started {$data.transfer_statistics[file.file_id]?.started}
+                +if('$data.transfer_statistics[file.file_id]?.state == "Complete"')
+                    +await('convert_attachment_file_name(file.file_id, file.file_extension) then path')
+                        img.attachment(src="{path}")
+                        p Bytes read {$data.transfer_statistics[file.file_id]?.bytes_read}
+                        p Bytes written {$data.transfer_statistics[file.file_id]?.bytes_written}
+                        p Started {$data.transfer_statistics[file.file_id]?.started}
 </template>
 
 <style lang="sass">

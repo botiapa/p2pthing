@@ -5,11 +5,18 @@ use serde::{Deserialize, Serialize};
 const MAX_VEC_LENGTH: usize = 30;
 
 #[derive(Clone, Serialize, Deserialize)]
+pub enum TransferState {
+    Transfering,
+    Complete,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct TransferStatistics {
     pub started: SystemTime,
     pub bytes_written: usize,
     /// Can be more than the file size if more than one peer requests the file.
     pub bytes_read: usize,
+    pub state: TransferState,
 }
 
 impl TransferStatistics {
@@ -18,6 +25,7 @@ impl TransferStatistics {
             started: SystemTime::now(),
             bytes_written: 0,
             bytes_read: 0,
+            state: TransferState::Transfering,
         }
     }
 }
@@ -28,7 +36,7 @@ pub struct ConnectionStatistics {
     total_read_bytes: u64,
     sent_bytes: Vec<(SystemTime, u64)>,
     read_bytes: Vec<(SystemTime, u64)>,
-    pings: Vec<Duration>
+    pings: Vec<Duration>,
 }
 
 // TODO: Optimize
@@ -82,7 +90,7 @@ impl ConnectionStatistics {
         let mut sum = 0; // Calculate the total sent
         for (i, c) in self.sent_bytes.iter().rev() {
             // FIXME: This is a horrible workaround
-            if i.elapsed()? > dur { 
+            if i.elapsed()? > dur {
                 break;
             }
             sum += c;

@@ -103,8 +103,14 @@ export class ChatMessageUI extends ChatMessage {
 	}
 }
 
+export enum TransferState {
+	Transfering = "Transfering",
+	Complete = "Complete",
+}
+
 export class TransferStatistics {
 	started: Date;
 	bytes_written: number;
 	bytes_read: number;
+	state: TransferState;
 }

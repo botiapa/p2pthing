@@ -1,9 +1,27 @@
-use std::{collections::HashMap, convert::TryInto, env, ffi::OsStr, fs::{self, File, Metadata}, io::{self, BufReader, Read, Seek, SeekFrom}, path::{Path, PathBuf}, time::{Instant, SystemTime}};
-use mio_misc::{channel::Sender};
-use sha2::{Digest, Sha256};
 use base64::encode_config;
+use mio_misc::channel::Sender;
+use sha2::{Digest, Sha256};
+use std::{
+    collections::HashMap,
+    convert::TryInto,
+    env,
+    ffi::OsStr,
+    fs::{self, File, Metadata},
+    io::{self, BufReader, Read, Seek, SeekFrom},
+    path::{Path, PathBuf},
+    time::{Instant, SystemTime},
+};
 
-use p2pthing_common::{encryption::NetworkedPublicKey, message_type::{FileChunk, FileDataChunk, FileId, InterthreadMessage, PreparedFile, msg_types::{FileChunks, RequestFileChunks}}, statistics::TransferStatistics, ui::UIConn};
+use p2pthing_common::{
+    encryption::NetworkedPublicKey,
+    message_type::{
+        msg_types::{FileChunks, RequestFileChunks},
+        FileChunk, FileDataChunk, FileId, InterthreadMessage, PreparedFile,
+    },
+    statistics::TransferState,
+    statistics::TransferStatistics,
+    ui::UIConn,
+};
 
 mod chunk_writer;
 use chunk_writer::ChunkWriter;
@@ -17,13 +35,13 @@ pub struct FileManager {
     read_buffer: Vec<u8>,
     ui_s: Sender<InterthreadMessage>,
     /// Requests that haven't been sent to their respective peers
-    new_requests: HashMap<NetworkedPublicKey, Vec<FileChunk>>
+    new_requests: HashMap<NetworkedPublicKey, Vec<FileChunk>>,
 }
 
 #[derive(Clone)]
 struct ReceivableChunk {
     requested: bool,
-    received: bool
+    received: bool,
 }
 
 impl ReceivableChunk {
@@ -38,14 +56,13 @@ impl ReceivableChunk {
 /// This struct holds an open file. It can either be a Reader or a Writer, but never both.
 struct OpenFile {
     file: FileType,
-    metadata: Metadata
+    metadata: Metadata,
 }
 
 enum FileType {
     Reader(BufReader<File>),
-    Writer(ChunkWriter)
+    Writer(ChunkWriter),
 }
-
 
 /// Max size of a single packet in bytes
 const CHUNK_SIZE: usize = 1 * 1000;
@@ -80,7 +97,11 @@ impl FileManager {
         let path = Path::new(&filename);
         let path = PathBuf::from(path);
         let filename = path.file_name().unwrap().to_str().unwrap();
-        let extension = path.extension().unwrap_or(OsStr::new("")).to_string_lossy().to_string();
+        let extension = path
+            .extension()
+            .unwrap_or(OsStr::new(""))
+            .to_string_lossy()
+            .to_string();
 
         let metadata = fs::metadata(path.clone())?;
         let total_length = metadata.len();
@@ -88,7 +109,7 @@ impl FileManager {
         let file_id = [&filename.as_bytes(), &total_length.to_be_bytes()[..]].concat();
         let file_id = Sha256::digest(&file_id);
         let file_id = encode_config(file_id, base64::URL_SAFE);
-        
+
         // If the file is not already opened, then open it
         // TODO: What if the size of the file changes (someone else writes to it). Because then the hash would change.
         if !self.open_files.contains_key(&file_id) {
@@ -100,18 +121,29 @@ impl FileManager {
             file_name: filename.to_string(),
             file_extension: extension,
             total_length,
-        })
+        });
     }
 
-    pub fn start_receiving_file(&mut self, file: PreparedFile, sender: NetworkedPublicKey) -> io::Result<()> {
+    pub fn start_receiving_file(
+        &mut self,
+        file: PreparedFile,
+        sender: NetworkedPublicKey,
+    ) -> io::Result<()> {
         let chunk_count: usize = file.total_length as usize / CHUNK_SIZE + 1;
         let original_name = PathBuf::from(file.file_name.clone());
-        let download_path = env::current_dir().unwrap().join(PathBuf::from(DOWNLOADS_FOLDER)).join(file.file_id.clone()).with_extension(original_name.extension().unwrap());
+        let download_path = env::current_dir()
+            .unwrap()
+            .join(PathBuf::from(DOWNLOADS_FOLDER))
+            .join(file.file_id.clone())
+            .with_extension(original_name.extension().unwrap());
         self.open_file(&file.file_id, &download_path, true, Some(file.total_length))?;
 
         // TODO: Enable receiving same file from multiple senders
         if !self.receiving_chunks.contains_key(&file.file_id) {
-            let x = self.receiving_chunks.insert(file.file_id.clone(), vec![ReceivableChunk::new(); chunk_count.try_into().unwrap()]);
+            let x = self.receiving_chunks.insert(
+                file.file_id.clone(),
+                vec![ReceivableChunk::new(); chunk_count.try_into().unwrap()],
+            );
             assert!(x.is_none());
             let x = self.file_senders.insert(file.file_id.clone(), sender);
             assert!(x.is_none());
@@ -125,18 +157,27 @@ impl FileManager {
         let mut total_requested = 0;
         for (file_id, chunks) in self.receiving_chunks.iter_mut() {
             // Skip chunks that are already downloaded
-            for (index, chunk) in chunks.iter_mut().enumerate().skip_while(|(_, x)| x.requested && x.received) {
-                if total_requested >= REQUESTED_CHUNK_COUNT { break; }
+            for (index, chunk) in chunks
+                .iter_mut()
+                .enumerate()
+                .skip_while(|(_, x)| x.requested && x.received)
+            {
+                if total_requested >= REQUESTED_CHUNK_COUNT {
+                    break;
+                }
                 if !chunk.requested {
                     let sender = self.file_senders.get(file_id).unwrap();
                     let peer_vec = match self.new_requests.get_mut(&sender) {
                         Some(v) => v,
-                        None =>  {
-                            self.new_requests.insert(sender.clone(), Vec::new()); 
+                        None => {
+                            self.new_requests.insert(sender.clone(), Vec::new());
                             self.new_requests.get_mut(&sender).unwrap()
-                        },
+                        }
                     };
-                    peer_vec.push(FileChunk{file_id: file_id.clone(), index});
+                    peer_vec.push(FileChunk {
+                        file_id: file_id.clone(),
+                        index,
+                    });
                     chunk.requested = true;
                 }
                 total_requested += 1;
@@ -153,7 +194,10 @@ impl FileManager {
         None
     }
 
-    pub fn get_file_chunks(&mut self, request: RequestFileChunks) -> Result<Vec<FileDataChunk>, String> {
+    pub fn get_file_chunks(
+        &mut self,
+        request: RequestFileChunks,
+    ) -> Result<Vec<FileDataChunk>, String> {
         let mut chunks: Vec<FileDataChunk> = Vec::new();
         for chunk in request.chunks {
             if let Some(f) = self.open_files.get_mut(&chunk.file_id) {
@@ -164,28 +208,42 @@ impl FileManager {
 
                 if let FileType::Reader(reader) = &mut f.file {
                     if let Err(e) = reader.seek(SeekFrom::Start(start_file_index as u64)) {
-                        return Err(format!("Failed seeking in a file: ({};{}) {}", chunk.file_id.clone(), start_file_index.clone(), e));
+                        return Err(format!(
+                            "Failed seeking in a file: ({};{}) {}",
+                            chunk.file_id.clone(),
+                            start_file_index.clone(),
+                            e
+                        ));
                     }
-                    
+
                     if let Err(e) = reader.read_exact(&mut self.read_buffer[0..read_bytes]) {
-                        return Err(format!("Failed reading from a file: ({}[{}]) {}", chunk.file_id.clone(), chunk.index.clone(), e));
+                        return Err(format!(
+                            "Failed reading from a file: ({}[{}]) {}",
+                            chunk.file_id.clone(),
+                            chunk.index.clone(),
+                            e
+                        ));
                     }
-    
+
                     let stats = self.transfer_statistics.get_mut(&chunk.file_id).unwrap();
                     stats.bytes_read += read_bytes;
-    
+
                     chunks.push(FileDataChunk {
                         file_id: chunk.file_id.clone(),
                         index: chunk.index,
                         data: self.read_buffer[0..read_bytes].to_vec(),
                     });
+                } else {
+                    self.ui_s.log_error(&format!(
+                        "Tried to read from a file, but couldn't find reader: ({})",
+                        chunk.file_id.clone()
+                    ));
                 }
-                else {
-                    self.ui_s.log_error(&format!("Tried to read from a file, but couldn't find reader: ({})", chunk.file_id.clone()));
-                }
-            }
-            else {
-                return Err(format!("Tried reading from a non existing file: ({})", chunk.file_id.clone()));
+            } else {
+                return Err(format!(
+                    "Tried reading from a non existing file: ({})",
+                    chunk.file_id.clone()
+                ));
             }
         }
         Ok(chunks)
@@ -198,31 +256,40 @@ impl FileManager {
                 let chunk_list = self.receiving_chunks.get_mut(&chunk.file_id).unwrap();
                 if !chunk_list[chunk.index].received {
                     let index_start = chunk.index * CHUNK_SIZE;
-                    
+
                     if let FileType::Writer(writer) = &mut f.file {
                         if let Err(e) = writer.write_chunk(chunk.index, &chunk.data[..]) {
-                            return Err(format!("Failed writing to a file: ({}[{}]) {}", chunk.file_id.clone(), index_start.clone(), e));
+                            return Err(format!(
+                                "Failed writing to a file: ({}[{}]) {}",
+                                chunk.file_id.clone(),
+                                index_start.clone(),
+                                e
+                            ));
                         }
-                        
+
                         let chunk_list = self.receiving_chunks.get_mut(&chunk.file_id).unwrap();
                         chunk_list[chunk.index].received = true;
-    
+
                         let stats = self.transfer_statistics.get_mut(&chunk.file_id).unwrap();
                         stats.bytes_written += chunk.data.len();
-    
+
                         self.update_requested_chunks();
-    
+
                         if !files_changed.contains(&chunk.file_id) {
                             files_changed.push(chunk.file_id.clone());
                         }
-                    }
-                    else {
-                        self.ui_s.log_error(&format!("Tried to write to a file, but couldn't find writer: ({})", chunk.file_id.clone()));
+                    } else {
+                        self.ui_s.log_error(&format!(
+                            "Tried to write to a file, but couldn't find writer: ({})",
+                            chunk.file_id.clone()
+                        ));
                     }
                 }
-            }
-            else {
-                return Err(format!("Tried writing to a non existing file: ({})", chunk.file_id.clone()));
+            } else {
+                return Err(format!(
+                    "Tried writing to a non existing file: ({})",
+                    chunk.file_id.clone()
+                ));
             }
         }
         self.check_files_done(files_changed);
@@ -237,12 +304,18 @@ impl FileManager {
                 self.file_senders.remove(&file).unwrap();
 
                 // TODO: Properly notify UI
-                let stats = self.transfer_statistics.remove(&file).unwrap();
-                
+                let stats = self.transfer_statistics.get_mut(&file).unwrap();
+                stats.state = TransferState::Complete;
+
                 if let Ok(elapsed) = stats.started.elapsed() {
                     let secs = elapsed.as_secs() as f64 + elapsed.subsec_nanos() as f64 * 1e-9;
-                    let mbs = open_file.metadata.len() as f64 / 1000f64 / 1000f64  / secs ;
-                    self.ui_s.log_info(&format!("Finished file ({}) in {}ms achieving {:.} MB/s", &file[0..10], elapsed.as_millis(), mbs));
+                    let mbs = open_file.metadata.len() as f64 / 1000f64 / 1000f64 / secs;
+                    self.ui_s.log_info(&format!(
+                        "Finished file ({}) in {}ms achieving {:.} MB/s",
+                        &file[0..10],
+                        elapsed.as_millis(),
+                        mbs
+                    ));
                 }
 
                 drop(open_file);
@@ -251,16 +324,26 @@ impl FileManager {
     }
 
     fn is_file_done(&self, file_id: &FileId) -> bool {
-        self.receiving_chunks.get(file_id).unwrap().iter().all(|x| x.received)
+        self.receiving_chunks
+            .get(file_id)
+            .unwrap()
+            .iter()
+            .all(|x| x.received)
     }
 
-    fn open_file(&mut self, file_id: &FileId, path: &Path, create: bool, set_file_length: Option<u64>) -> io::Result<()> {
+    fn open_file(
+        &mut self,
+        file_id: &FileId,
+        path: &Path,
+        create: bool,
+        set_file_length: Option<u64>,
+    ) -> io::Result<()> {
         if !self.open_files.contains_key(file_id) {
             let file = fs::OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create_new(create)
-            .open(path.clone())?;
+                .read(true)
+                .write(true)
+                .create_new(create)
+                .open(path.clone())?;
 
             if let Some(len) = set_file_length {
                 file.set_len(len)?;
@@ -269,20 +352,25 @@ impl FileManager {
             let metadata = file.metadata()?;
             let file = match create {
                 true => {
-                    self.ui_s.log_info(&format!("Opened a file for writing: {}", path.clone().to_str().unwrap()));
+                    self.ui_s.log_info(&format!(
+                        "Opened a file for writing: {}",
+                        path.clone().to_str().unwrap()
+                    ));
                     FileType::Writer(ChunkWriter::new(file, CHUNK_SIZE, REQUESTED_CHUNK_COUNT))
-                },
+                }
                 false => {
-                    self.ui_s.log_info(&format!("Opened a file for reading: {}", path.clone().to_str().unwrap()));
+                    self.ui_s.log_info(&format!(
+                        "Opened a file for reading: {}",
+                        path.clone().to_str().unwrap()
+                    ));
                     FileType::Reader(BufReader::new(file))
-                },
+                }
             };
 
-            self.open_files.insert(file_id.clone(), OpenFile {
-                file,
-                metadata
-            });
-            self.transfer_statistics.insert(file_id.clone(), TransferStatistics::new());
+            self.open_files
+                .insert(file_id.clone(), OpenFile { file, metadata });
+            self.transfer_statistics
+                .insert(file_id.clone(), TransferStatistics::new());
         }
         Ok(())
     }
