@@ -1,11 +1,11 @@
 use std::net::SocketAddr;
 
-use p2pthing_common::{encryption::SymmetricEncryption, message_type::{InterthreadMessage, MsgType, UdpPacket, msg_types::{self, AnnounceSecret, ChatMessage}}, ui::UIConn};
+use p2pthing_common::{encryption::SymmetricEncryption, message_type::{InterthreadMessage, MsgType, UdpPacket, msg_types::{self, AnnounceSecret, ChatMessage, AnnouncePublic}}, ui::UIConn};
 use p2pthing_tui::tui::Tui;
 
 use crate::client::udp_connection::UdpConnectionState;
 
-use super::ConnectionManager;
+use super::{ConnectionManager, MULTICAST_MAGIC};
 
 impl ConnectionManager {
     pub fn read_udp_message(&mut self, _: usize, addr: SocketAddr, buf: &[u8]) {
@@ -55,6 +55,7 @@ impl ConnectionManager {
                 self.on_confirmation_message(addr, &buf[1..]);
             }
             Some(MsgType::OpusPacket) => {
+                #[cfg(feature = "audio")]
                 self.on_opus_packet(addr, &buf[1..]);
             }
             Some(MsgType::RequestFileChunks) => {
@@ -64,6 +65,21 @@ impl ConnectionManager {
                 self.on_file_chunks(addr, &buf[1..]);
             }
             _ => unreachable!()
+        }
+    }
+
+    pub fn read_multicast_message(&mut self, _: usize, addr: SocketAddr, buf: &[u8]) {
+        //TODO: Move all this logic to udp_connection.rs
+
+        // First u32 is the magic packet
+        let magic = &buf[0..4];
+        let magic: u32 = bincode::deserialize(magic).unwrap();
+        if magic == MULTICAST_MAGIC {
+            let announce: AnnouncePublic = bincode::deserialize(&buf[4..]).unwrap();
+            if announce.public_key != self.encryption.get_public_key() {
+                self.ui_s.log_info(&format!("Received correct multicast announce message: {:?}", announce.public_key))
+            }
+            
         }
     }
 
@@ -150,6 +166,7 @@ impl ConnectionManager {
         }
     }
 
+    #[cfg(feature = "audio")]
     fn on_opus_packet(&mut self, addr: SocketAddr, data: &[u8]) {
         let data: Vec<u8> = bincode::deserialize(data).unwrap();
         let p = self.peers.iter().find(|p| p.udp_addr.unwrap() == addr).unwrap();

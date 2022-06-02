@@ -1,12 +1,15 @@
 use mio_misc::{NotificationId, channel::channel, queue::NotificationQueue};
 use mio::{Interest, Poll, Waker, net::{TcpStream, UdpSocket}};
 use p2pthing_common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption}, message_type::{InterthreadMessage, MsgType, Peer, UdpPacket, msg_types::{Call, ChatMessage}}};
-use std::{collections::HashMap, net::SocketAddr, rc::Rc, str::FromStr, sync::{Arc}, thread::{self, JoinHandle}, time::{Duration, Instant}};
+use socket2::{Socket, Protocol, Type, Domain, SockAddr};
+use std::{collections::HashMap, net::{SocketAddr, Ipv4Addr}, rc::Rc, str::FromStr, sync::{Arc}, thread::{self, JoinHandle}, time::{Duration, Instant}};
 use mio_misc::channel::Sender;
 
 use mio::Token;
 
-use super::{audio::Audio, file_manager::FileManager, udp_connection::{UdpConnection, UdpConnectionState}};
+use super::{file_manager::FileManager, udp_connection::{UdpConnection, UdpConnectionState}};
+#[cfg(feature = "audio")]
+use super::audio::Audio;
 
 mod event_loop;
 mod tcp_messages;
@@ -16,6 +19,7 @@ mod utils;
 const RENDEZVOUS: Token = Token(0);
 const WAKER: Token = Token(1);
 const UDP_SOCKET: Token = Token(2);
+const MULTICAST_SOCKET: Token = Token(3);
 
 /// Call decay defined in seconds
 const CALL_DECAY: Duration = Duration::from_secs(10); 
@@ -31,12 +35,23 @@ const RECONNECT_DELAY: Duration = Duration::from_secs(5);
 pub const RELIABLE_MESSAGE_DELAY: Duration = Duration::from_secs(2);
 /// Delay between updating the UI about connection statistics
 pub const STATS_UPDATE_DELAY: Duration = Duration::from_secs(3);
+/// Delay between announce broadcasts
+pub const BROADCAST_DELAY: Duration = Duration::from_secs(5);
+/// The destination IP of multicast announces
+pub const MULTICAST_IP: &str = "225.1.1.1";
+/// The address the multicast socket will bind to
+pub const MULTICAST_BIND_ADDRESS: &str = "0.0.0.0:42070";
+/// The actual multicast address the multicast packets will be sent to
+pub const MULTICAST_ADDRESS: &str = "225.1.1.1:42070";
+/// Magic to filter out unrelevant multicast data easily
+const MULTICAST_MAGIC: u32 = 0xdeadbeef;
 
 pub struct ConnectionManager {
     rendezvous_socket: TcpStream,
     rendezvous_ip: SocketAddr,
     rendezvous_public_key: Option<NetworkedPublicKey>,
     udp_socket: Rc<UdpSocket>,
+    multicast_socket: UdpSocket,
     peers: Vec<Peer>,
     udp_connections: Vec<UdpConnection>,
     poll: Poll,
@@ -46,9 +61,11 @@ pub struct ConnectionManager {
     encryption: Rc<AsymmetricEncryption>,
     /// Instant is when the call was sent
     calls_in_progress: Vec<(Call, Instant)>,
+    #[cfg(feature = "audio")]
     audio: Audio,
     /// The last instant when the connection statistics were sent to the UI
     last_stats_update: Instant,
+    last_broadcast: Instant,
     next_custom_id: u32,
     /// Messages waiting for confirmation. The U32 is the packet_id, while the String is the id of the message.
     msg_confirmations: HashMap<u32, String>
@@ -85,6 +102,16 @@ impl ConnectionManager {
         poll.registry().register(&mut udp_socket, UDP_SOCKET, Interest::READABLE).unwrap();
         let mut udp_connections = Vec::new();
 
+        let mut multicast_socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP)).unwrap();
+        multicast_socket.set_reuse_address(true);
+        multicast_socket.set_nonblocking(true);
+        multicast_socket.bind(&SockAddr::from(SocketAddr::from_str(MULTICAST_BIND_ADDRESS).unwrap())).unwrap();
+        multicast_socket.join_multicast_v4(&Ipv4Addr::from_str(MULTICAST_IP).unwrap(), &Ipv4Addr::UNSPECIFIED);
+        let multicast_socket = std::net::UdpSocket::from(multicast_socket);
+        let mut multicast_socket = UdpSocket::from_std(multicast_socket);
+        poll.registry().register(&mut multicast_socket, MULTICAST_SOCKET, Interest::READABLE).unwrap();
+
+        #[cfg(feature = "audio")]
         let audio = Audio::new(ui_s.clone(), cm_s.clone());
         let file_manager = FileManager::new(ui_s.clone());
 
@@ -103,6 +130,7 @@ impl ConnectionManager {
             rendezvous_ip: rend_ip,
             rendezvous_public_key: None,
             udp_socket: udp_socket.clone(),
+            multicast_socket,
             peers: Vec::new(),
             udp_connections,
             poll,
@@ -111,8 +139,10 @@ impl ConnectionManager {
             file_manager,
             encryption,
             calls_in_progress: Vec::new(),
+            #[cfg(feature = "audio")]
             audio,
             last_stats_update: Instant::now(),
+            last_broadcast: Instant::now(),
             next_custom_id: 0,
             msg_confirmations: HashMap::new(),
         }

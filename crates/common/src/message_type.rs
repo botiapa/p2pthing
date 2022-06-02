@@ -11,7 +11,8 @@ use super::{debug_message::DebugMessageType, encryption::{NetworkedPublicKey, Sy
 pub type FileName = String;
 pub type MessageId = String;
 
-#[derive(Serialize, Deserialize, Clone)]
+/// As the name implies, this facilitates the messaging between the threads.
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum InterthreadMessage {
     SendChatMessage(NetworkedPublicKey, String, Option<Vec<FileName>>),
     /// - **From CM to UI:** Received a message either from another peer, or from themselves
@@ -76,7 +77,7 @@ pub enum MsgType {
     FileChunks=12
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Peer {
     pub addr: Option<SocketAddr>,
     pub udp_addr: Option<SocketAddr>,
@@ -137,7 +138,7 @@ pub struct UdpPacket {
 pub type FileId = String;
 
 /// A file which has been split into transmittable chunks
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct PreparedFile {
     /// This is a base64 value that is obtained by hashing the filename and file size
     pub file_id: FileId,
@@ -146,7 +147,7 @@ pub struct PreparedFile {
     pub total_length: u64,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct FileChunk {
     pub file_id: FileId, 
     pub index: usize
@@ -158,7 +159,7 @@ impl Display for FileChunk {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct FileDataChunk {
     pub file_id: FileId, 
     pub index: usize,
@@ -206,7 +207,7 @@ pub mod msg_types {
         pub response: bool
     }
 
-    #[derive(Clone, Serialize, Deserialize)]
+    #[derive(Clone, Serialize, Deserialize, Debug)]
     pub struct ChatMessage {
         pub id: String,
         pub author: NetworkedPublicKey,
@@ -231,12 +232,12 @@ pub mod msg_types {
         pub id: u32
     }
 
-    #[derive(Clone, Serialize, Deserialize)]
+    #[derive(Clone, Serialize, Deserialize, Debug)]
     pub struct RequestFileChunks {
         pub chunks: Vec<FileChunk>
     }
 
-    #[derive(Clone, Serialize, Deserialize)]
+    #[derive(Clone, Serialize, Deserialize, Debug)]
     pub struct FileChunks {
         pub chunks: Vec<FileDataChunk>
     }

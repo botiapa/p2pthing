@@ -1,16 +1,17 @@
-use std::{io::{self, Read}, net::Shutdown, sync::mpsc::{self, Receiver}, thread, time::{Duration, Instant}};
+use std::{io::{self, Read}, net::{Shutdown, UdpSocket, Ipv4Addr, SocketAddr}, sync::mpsc::{self, Receiver}, thread, time::{Duration, Instant}};
 
 use base64::encode_config;
 use chrono::Utc;
 use io::ErrorKind;
 use mio::{Events, Interest, net::TcpStream};
-use p2pthing_common::{message_type::{InterthreadMessage, MsgType, msg_types}, ui::UIConn};
+use p2pthing_common::{message_type::{InterthreadMessage, MsgType, msg_types::{self, AnnouncePublic}, UdpPacket}, ui::UIConn};
 use p2pthing_tui::tui::Tui;
 use sha2::{Digest, Sha256};
+use socket2::{Socket, Type, Protocol, SockAddr, Domain};
 
 use crate::client::{file_manager::FileManager, udp_connection::UdpConnectionState};
 
-use super::{ANNOUNCE_DELAY, CALL_DECAY, ConnectionManager, KEEP_ALIVE_DELAY, KEEP_ALIVE_DELAY_MIDCALL, RECONNECT_DELAY, RENDEZVOUS, STATS_UPDATE_DELAY, UDP_SOCKET, WAKER};
+use super::{ANNOUNCE_DELAY, CALL_DECAY, ConnectionManager, KEEP_ALIVE_DELAY, KEEP_ALIVE_DELAY_MIDCALL, RECONNECT_DELAY, RENDEZVOUS, STATS_UPDATE_DELAY, UDP_SOCKET, WAKER, BROADCAST_DELAY, MULTICAST_SOCKET, MULTICAST_ADDRESS, MULTICAST_MAGIC};
 
 impl ConnectionManager {
     pub fn event_loop(&mut self, r: &mut Receiver<InterthreadMessage>) {
@@ -18,6 +19,7 @@ impl ConnectionManager {
         while running {
             let mut events = Events::with_capacity(1024);
 
+            #[cfg(feature = "audio")]
             if !self.audio.started && self.udp_connections.iter().any(|c| c.upgraded && c.associated_peer.is_some()) {
                 self.audio.init();
             }
@@ -35,6 +37,9 @@ impl ConnectionManager {
 
             // Send keep alive messages
             self.send_keep_alive_messages();
+
+            // Send broadcast messages
+            self.send_multicast_messages();
 
             // Send reliable messages
             self.send_reliable_messages();
@@ -96,6 +101,21 @@ impl ConnectionManager {
         }
     }
 
+   
+    fn send_multicast_messages(&mut self) {
+        if self.last_broadcast.elapsed() > BROADCAST_DELAY {
+            let announce = AnnouncePublic{ public_key: self.encryption.get_public_key().clone() };
+            let mut announce = bincode::serialize(&announce).unwrap();
+            let mut magic = bincode::serialize(&MULTICAST_MAGIC).unwrap();
+            magic.append(&mut announce);
+
+            self.udp_socket.send_to(&magic[..], MULTICAST_ADDRESS.parse().unwrap()).unwrap();
+            self.ui_s.log_info(&"Sent broadcast message");
+            self.last_broadcast = Instant::now();
+        }
+        
+    }
+
     fn send_reliable_messages(&mut self) {
         for conn in &mut self.udp_connections {
             match conn.state {
@@ -137,6 +157,7 @@ impl ConnectionManager {
                                 Err(e) => self.ui_s.log_error(&format!("Error while trying to send a chat message: {}", e.to_string()))
                             }
                         },
+                        #[cfg(feature = "audio")]
                         InterthreadMessage::OpusPacketReady(data) => {
                             for conn in &mut self.udp_connections {
                                 if conn.upgraded && conn.associated_peer.is_some() {
@@ -144,6 +165,7 @@ impl ConnectionManager {
                                 }
                             }
                         }
+                        #[cfg(feature = "audio")]
                         InterthreadMessage::AudioDataReadyToBeProcessed(data) => self.audio.process_and_send_packet(data),
                         InterthreadMessage::OnChatMessage(msg) => self.ui_s.send(InterthreadMessage::OnChatMessage(msg)).unwrap(),
                         InterthreadMessage::ConnectToServer() => {
@@ -207,11 +229,16 @@ impl ConnectionManager {
                                 }
                             }
                         }
+                        #[cfg(feature = "audio")]
                         InterthreadMessage::AudioChangeInputDevice(d) => self.audio.change_input_device(d),
+                        #[cfg(feature = "audio")]
                         InterthreadMessage::AudioChangeOutputDevice(d) => self.audio.change_output_device(d),
+                        #[cfg(feature = "audio")]
                         InterthreadMessage::AudioChangePreferredKbits(kbits) => self.audio.change_preferred_kbits(kbits),
+                        #[cfg(feature = "audio")]
                         InterthreadMessage::AudioChangeMuteState(muted) => self.audio.change_mute_state(muted),
                         //InterthreadMessage::AudioChangeDenoiserState(denoiser_state) => self.audio.change_denoiser_state(denoiser_state),
+                        #[cfg(feature = "audio")]
                         InterthreadMessage::AudioChangeDenoiserState(denoiser_state) => self.ui_s.log_error("Denoiser is currently disabled"),
                         InterthreadMessage::Quit() => {
                             match self.rendezvous_socket.shutdown(Shutdown::Both) {
@@ -275,7 +302,6 @@ impl ConnectionManager {
                                     }
                                     Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                                         // Socket is not ready anymore, stop reading
-                                        
                                         break;
                                     }
                                     Err(ref e) if e.kind() == io::ErrorKind::ConnectionReset => {
@@ -284,6 +310,23 @@ impl ConnectionManager {
                                     e => println!("err={:?}", e), // Unexpected error
                                 }
                             },
+                            MULTICAST_SOCKET => {
+                                let mut buf = [0; 65536];
+                                match self.multicast_socket.recv_from(&mut buf) {
+                                    Ok(r) => {
+                                        let (read, addr) = r;
+                                        self.read_multicast_message(read, addr, &buf);
+                                    }
+                                    Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                                        // Socket is not ready anymore, stop reading
+                                        break;
+                                    }
+                                    Err(ref e) if e.kind() == io::ErrorKind::ConnectionReset => {
+                                        self.ui_s.log_error("Couldn't read from multicast socket (ConnectionReset) ");
+                                    }
+                                    e => println!("err={:?}", e), // Unexpected error
+                                }
+                            }
                             _ => unreachable!()
                         }
                     }
@@ -328,7 +371,9 @@ impl ConnectionManager {
             durations.push(conn.next_keep_alive());
         }
         let next_stats_update = (self.last_stats_update + STATS_UPDATE_DELAY).checked_duration_since(self.last_stats_update).unwrap_or(Duration::from_secs(0));
+        let next_broadcast = (self.last_broadcast + BROADCAST_DELAY).checked_duration_since(self.last_broadcast).unwrap_or(Duration::from_secs(0));
         durations.push(next_stats_update);
+        durations.push(next_broadcast);
         durations.sort_by(|a,b| a.cmp(b));
     }
 

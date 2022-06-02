@@ -15,7 +15,8 @@ impl Tui {
         for msg in self.ui_r.try_iter() {
             match msg {
                 InterthreadMessage::AnnounceResponse(msg) => {
-                    self.peers = msg.iter().map(UIPeer::from).collect();
+                    // Append new peers
+                    self.peers.append(&mut msg.iter().map(UIPeer::from).filter(|p| !self.peers.contains(p)).collect());
                     match self.contact_list_state.selected() {
                         None if self.peers.len() > 0 => self.contact_list_state.select(Some(0)),
                         _ => {}
@@ -116,7 +117,8 @@ impl Tui {
                 },
                 InterthreadMessage::ConnectionStatistics(stats) => {
                     self.conn_stats = stats;
-                }
+                },
+                InterthreadMessage::TransferStatistics(_) => {} // File transfer not implemented in TUI.
                 _ => unreachable!()
             }
         }

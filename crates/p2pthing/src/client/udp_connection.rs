@@ -31,7 +31,7 @@ pub struct UdpConnection {
     pub received_messages: Vec<u32>,
     pub sock: Rc<UdpSocket>,
     pub symmetric_key: Option<SymmetricEncryption>,
-    /// Is a symmetrically encrypted tunnel created?
+    /// Has a symmetrically encrypted tunnel been created?
     pub upgraded: bool,
     pub encryption: Rc<AsymmetricEncryption>,
     pub statistics: ConnectionStatistics

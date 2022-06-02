@@ -4,13 +4,13 @@ use serde::{Deserialize, Serialize};
 
 const MAX_VEC_LENGTH: usize = 30;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub enum TransferState {
     Transfering,
     Complete,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct TransferStatistics {
     pub started: SystemTime,
     pub bytes_written: usize,
@@ -30,7 +30,7 @@ impl TransferStatistics {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct ConnectionStatistics {
     total_sent_bytes: u64,
     total_read_bytes: u64,

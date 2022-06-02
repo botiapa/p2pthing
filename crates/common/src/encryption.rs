@@ -1,3 +1,4 @@
+use core::fmt;
 use std::fmt::Display;
 
 use aes_gcm_siv::Aes256GcmSiv; // Or `Aes128GcmSiv`
@@ -70,6 +71,12 @@ impl Display for NetworkedPublicKey {
 pub struct SymmetricEncryption {
     pub secret: Vec<u8>,
     sym_key: Aes256GcmSiv
+}
+
+impl fmt::Debug for SymmetricEncryption {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SymmetricEncryption")
+    }
 }
 
 impl SymmetricEncryption {
