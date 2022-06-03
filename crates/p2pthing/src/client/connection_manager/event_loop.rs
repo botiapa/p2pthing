@@ -210,6 +210,7 @@ impl ConnectionManager {
                         }
                         InterthreadMessage::Call(p) => {
                             let peer = self.peers.iter().find(|peer| peer.public_key == p).unwrap(); //FIXME: Unwrap err here
+                            // FIXME: Knowing the UDP address does not mean we are connected
                             if peer.udp_addr.is_some() {
                                 self.ui_s.log_warning(&format!("Tried to call a peer which is already connected {}", p));
                                 continue;

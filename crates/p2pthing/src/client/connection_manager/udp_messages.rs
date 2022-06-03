@@ -1,6 +1,6 @@
 use std::net::SocketAddr;
 
-use p2pthing_common::{encryption::SymmetricEncryption, message_type::{InterthreadMessage, MsgType, UdpPacket, msg_types::{self, AnnounceSecret, ChatMessage, AnnouncePublic}}, ui::UIConn};
+use p2pthing_common::{encryption::SymmetricEncryption, message_type::{InterthreadMessage, MsgType, UdpPacket, msg_types::{self, AnnounceSecret, ChatMessage, AnnouncePublic}, Peer}, ui::UIConn};
 use p2pthing_tui::tui::Tui;
 
 use crate::client::udp_connection::UdpConnectionState;
@@ -76,8 +76,20 @@ impl ConnectionManager {
         let magic: u32 = bincode::deserialize(magic).unwrap();
         if magic == MULTICAST_MAGIC {
             let announce: AnnouncePublic = bincode::deserialize(&buf[4..]).unwrap();
+            // If the peer is not this peer
             if announce.public_key != self.encryption.get_public_key() {
-                self.ui_s.log_info(&format!("Received correct multicast announce message: {:?}", announce.public_key))
+                if let Some(p) = self.peers.iter().find(|x| x.public_key == p.public_key) {
+                    p.udp_addr = Some(addr);
+                }
+                else {
+                    self.peers.push(Peer {
+                        addr: None,
+                        udp_addr: Some(addr),
+                        public_key: announce.public_key,
+                        sym_key: None
+                    });
+                }
+                self.ui_s.log_info(&format!("Received multicast announce message: {:?}", announce.public_key))
             }
             
         }
