@@ -1,6 +1,4 @@
 use base64::encode_config;
-use mio_misc::channel::Sender;
-use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
     convert::TryInto,
@@ -8,8 +6,7 @@ use std::{
     ffi::OsStr,
     fs::{self, File, Metadata},
     io::{self, BufReader, Read, Seek, SeekFrom},
-    path::{Path, PathBuf},
-    time::{Instant, SystemTime},
+    path::{Path, PathBuf}
 };
 
 use p2pthing_common::{
@@ -20,7 +17,7 @@ use p2pthing_common::{
     },
     statistics::TransferState,
     statistics::TransferStatistics,
-    ui::UIConn,
+    ui::UIConn, mio_misc::channel::Sender, sha2::{Sha256, Digest},
 };
 
 mod chunk_writer;

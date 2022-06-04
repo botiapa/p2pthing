@@ -1,7 +1,8 @@
 use std::io::{self, Write};
 
+use p2pthing_common::num;
 use p2pthing_common::{encryption::NetworkedPublicKey, message_type::MsgType, ui::UIConn};
-use serde::Serialize;
+use p2pthing_common::serde::Serialize;
 
 use super::ConnectionManager;
 

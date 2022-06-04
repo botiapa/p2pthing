@@ -18,8 +18,8 @@
 	const handler = build_event_handler();
 
 	function main() {
-		const unl1 = listen("client-event", (event) => {
-			const new_data = handler.handle($data, event);
+		const unl1 = listen("client-event", async (event) => {
+			const new_data = await handler.handle($data, event);
 			if (new_data) data.set(new_data);
 		});
 

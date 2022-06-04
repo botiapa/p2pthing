@@ -1,15 +1,13 @@
-use std::{io::{self, Read}, net::{Shutdown, UdpSocket, Ipv4Addr, SocketAddr}, sync::mpsc::{self, Receiver}, thread, time::{Duration, Instant}};
+use std::{io::{self, Read}, net::Shutdown, sync::mpsc::{self, Receiver}, thread, time::{Duration, Instant}};
 
 use base64::encode_config;
 use chrono::Utc;
 use io::ErrorKind;
 use mio::{Events, Interest, net::TcpStream};
-use p2pthing_common::{message_type::{InterthreadMessage, MsgType, msg_types::{self, AnnouncePublic}, UdpPacket}, ui::UIConn};
-use p2pthing_tui::tui::Tui;
-use sha2::{Digest, Sha256};
-use socket2::{Socket, Type, Protocol, SockAddr, Domain};
+use p2pthing_common::{message_type::{InterthreadMessage, MsgType, msg_types::{self, AnnouncePublic}}, ui::UIConn};
+use p2pthing_common::sha2::{Digest, Sha256};
 
-use crate::client::{file_manager::FileManager, udp_connection::UdpConnectionState};
+use crate::client::udp_connection::UdpConnectionState;
 
 use super::{ANNOUNCE_DELAY, CALL_DECAY, ConnectionManager, KEEP_ALIVE_DELAY, KEEP_ALIVE_DELAY_MIDCALL, RECONNECT_DELAY, RENDEZVOUS, STATS_UPDATE_DELAY, UDP_SOCKET, WAKER, BROADCAST_DELAY, MULTICAST_SOCKET, MULTICAST_ADDRESS, MULTICAST_MAGIC};
 

@@ -1,9 +1,9 @@
-use mio_misc::{NotificationId, channel::channel, queue::NotificationQueue};
+use p2pthing_common::mio_misc::{NotificationId, channel::channel, queue::NotificationQueue, self};
 use mio::{Interest, Poll, Waker, net::{TcpStream, UdpSocket}};
-use p2pthing_common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption}, message_type::{InterthreadMessage, MsgType, Peer, UdpPacket, msg_types::{Call, ChatMessage}}};
+use p2pthing_common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption}, message_type::{InterthreadMessage, MsgType, Peer, UdpPacket, msg_types::Call}};
 use socket2::{Socket, Protocol, Type, Domain, SockAddr};
 use std::{collections::HashMap, net::{SocketAddr, Ipv4Addr}, rc::Rc, str::FromStr, sync::{Arc}, thread::{self, JoinHandle}, time::{Duration, Instant}};
-use mio_misc::channel::Sender;
+use p2pthing_common::mio_misc::channel::Sender;
 
 use mio::Token;
 

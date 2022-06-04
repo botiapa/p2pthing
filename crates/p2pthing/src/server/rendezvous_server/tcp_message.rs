@@ -1,7 +1,7 @@
-use std::{net::SocketAddr};
+use std::net::SocketAddr;
 
 use mio::Token;
-use p2pthing_common::{encryption::SymmetricEncryption, message_type::{MsgType, Peer, msg_types::{self, AnnouncePublic, AnnounceSecret, Call, CallResponse}}, read_exact};
+use p2pthing_common::{encryption::SymmetricEncryption, message_type::{MsgType, Peer, msg_types::{self, AnnouncePublic, AnnounceSecret, Call, CallResponse}, PeerSource}, read_exact, num};
 
 use super::{CallRequest, RendezvousServer};
 
@@ -59,6 +59,7 @@ impl RendezvousServer {
             addr: Some(addr),
             udp_addr: None,
             public_key: announcement.public_key,
+            source: PeerSource::Rendezvous.into(),
             sym_key: Some(self.sym_keys.remove(&addr).unwrap())
         };
         println!("Received public key for peer ({}): {}", p.addr.unwrap(), p.public_key);

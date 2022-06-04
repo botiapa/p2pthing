@@ -4,6 +4,19 @@ pub mod debug_message;
 pub mod ui;
 pub mod statistics;
 
+// Reexport common deps
+pub use enumset;
+pub use rsa;
+pub use sha2;
+pub use aes_gcm_siv;
+pub use rand;
+pub use rand_core;
+pub use num;
+pub use num_derive;
+pub use num_traits;
+pub use mio_misc;
+pub use serde;
+
 use std::io::Read;
 
 // TODO: Error handling

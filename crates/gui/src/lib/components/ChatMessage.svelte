@@ -7,19 +7,6 @@
 	export let message: ChatMessage;
 	export let name_visible: boolean;
 
-	function convertFileSrc(filePath: string): string {
-		return navigator.userAgent.includes("Windows")
-			? `https://asset.localhost/${filePath}`
-			: `asset:/${filePath}`;
-	}
-
-	async function convert_attachment_file_name(fileName: string, ext: string): Promise<string> {
-		let curr_dir = await path.currentDir();
-		let full_path = curr_dir + "downloads\\" + fileName + "." + ext;
-		console.log(full_path);
-		return Promise.resolve(convertFileSrc(full_path));
-	}
-
 	$: console.log(`transfers: `, $data.transfer_statistics);
 </script>
 
@@ -31,12 +18,16 @@
         +if("message.attachments")
             +each('message.attachments as file (file.file_id)')
                 p {file.file_name}
-                +if('$data.transfer_statistics[file.file_id]?.state == "Complete"')
-                    +await('convert_attachment_file_name(file.file_id, file.file_extension) then path')
-                        img.attachment(src="{path}")
+                +if('$data.transfer_statistics[file.file_id]')
+                    +if('$data.transfer_statistics[file.file_id]?.state == "Complete" && file.absolute_path')
+                        img.attachment(src="{file.absolute_path}")
                         p Bytes read {$data.transfer_statistics[file.file_id]?.bytes_read}
                         p Bytes written {$data.transfer_statistics[file.file_id]?.bytes_written}
                         p Started {$data.transfer_statistics[file.file_id]?.started}
+                        +else
+                            progress(value="{$data.transfer_statistics[file.file_id].bytes_written/file.total_length}")
+                    
+
 </template>
 
 <style lang="sass">

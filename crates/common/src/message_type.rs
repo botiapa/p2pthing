@@ -1,4 +1,5 @@
 use std::{collections::HashMap, net::SocketAddr, fmt::Display};
+use enumset::{EnumSetType, EnumSet};
 use num_derive::{FromPrimitive, ToPrimitive};
 use serde::{Serialize, Deserialize};
 
@@ -77,11 +78,18 @@ pub enum MsgType {
     FileChunks=12
 }
 
+#[derive(EnumSetType, Serialize, Deserialize,  Debug)]
+pub enum PeerSource {
+    Multicast,
+    Rendezvous
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Peer {
     pub addr: Option<SocketAddr>,
     pub udp_addr: Option<SocketAddr>,
     pub public_key: NetworkedPublicKey,
+    pub source: EnumSet<PeerSource>,
     #[serde(skip)]
     pub sym_key: Option<SymmetricEncryption>
 }
@@ -101,6 +109,7 @@ impl Peer {
             addr: self.addr.clone(),
             udp_addr: self.udp_addr.clone(),
             sym_key: None,
+            source: self.source.clone(),
         }
     }
 
@@ -111,6 +120,7 @@ impl Peer {
             addr: None,
             udp_addr: None,
             sym_key: None,
+            source: self.source.clone()
         }
     }
 }

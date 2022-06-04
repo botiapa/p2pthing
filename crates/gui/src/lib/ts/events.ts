@@ -8,7 +8,7 @@ import {
 	UIPeer,
 } from "./interfaces";
 
-type Handler = (data: GuiData, event_data: any) => GuiData | void;
+type Handler = (data: GuiData, event_data: any) => Promise<GuiData | void>;
 export class EventHandler {
 	handlers: Map<string, Handler> = new Map();
 
@@ -19,7 +19,7 @@ export class EventHandler {
 		return this;
 	}
 
-	handle(data: GuiData, event: any): GuiData | void {
+	async handle(data: GuiData, event: any): Promise<GuiData | void> {
 		for (const [event_name, handler] of this.handlers) {
 			if (event.payload.hasOwnProperty(event_name)) {
 				return handler(data, event.payload[event_name]);
@@ -47,11 +47,11 @@ export function build_event_handler(): EventHandler {
 	return event_handler;
 }
 
-function on_debug_message(data: GuiData, debug_data: any) {
+async function on_debug_message(data: GuiData, debug_data: any) {
 	console.log(`${debug_data[1]}: ${debug_data[0]}`);
 }
 
-function on_announce_response(data: GuiData, peers: any[]) {
+async function on_announce_response(data: GuiData, peers: any[]) {
 	for (const p of peers) {
 		if (!data.p(p.public_key)) {
 			data.peers.push(new UIPeer(p));
@@ -60,47 +60,51 @@ function on_announce_response(data: GuiData, peers: any[]) {
 	return data;
 }
 
-function on_peer_disconnected(data: GuiData, public_key: any) {
+async function on_peer_disconnected(data: GuiData, public_key: any) {
 	if (data.selected_peer.public_key.equals(public_key)) data.selected_peer = null;
 	data.peers = data.peers.filter((peer) => !peer.public_key.equals(public_key));
 	return data;
 }
 
-function on_punchthrough_successfull(data: GuiData, public_key: any) {
+async function on_punchthrough_successfull(data: GuiData, public_key: any) {
 	data.p(public_key).call_status = CallStatus.PunchthroughSuccessfull;
 	return data;
 }
 
-function on_call_denied(data: GuiData, public_key: any) {
+async function on_call_denied(data: GuiData, public_key: any) {
 	data.p(public_key).call_status = CallStatus.RequestFailed;
 	return data;
 }
 
-function on_call(data: GuiData, public_key: any) {
+async function on_call(data: GuiData, public_key: any) {
 	data.p(public_key).call_status = CallStatus.WaitingForAnswer;
 	return data;
 }
 
-function on_call_accepted(data: GuiData, public_key: any) {
+async function on_call_accepted(data: GuiData, public_key: any) {
 	data.p(public_key).call_status = CallStatus.PunchthroughInProgress;
 	return data;
 }
 
-function on_chat_message(data: GuiData, msg: ChatMessage) {
+async function on_chat_message(data: GuiData, msg: ChatMessage) {
 	let other_peer: NetworkedPublicKey;
 	if (!NetworkedPublicKey.equals(msg.author, data.own_public_key)) other_peer = msg.author;
 	else if (!NetworkedPublicKey.equals(msg.recipient, data.own_public_key))
 		other_peer = msg.recipient;
 	else console.error("Tried sending message to yourself.");
 	let p = data.peers.find((p) => NetworkedPublicKey.equals(p.public_key, other_peer));
-	p.messages.push(
-		new ChatMessageUI(msg, NetworkedPublicKey.equals(msg.recipient, data.own_public_key))
+	let new_msg = new ChatMessageUI(
+		msg,
+		NetworkedPublicKey.equals(msg.recipient, data.own_public_key)
 	);
+	await new_msg.generate_absolute_paths();
+	console.log("yoo:", new_msg.attachments[0].absolute_path);
+	p.messages.push(new_msg);
 
 	return data;
 }
 
-function on_chat_message_received(data: GuiData, id: string) {
+async function on_chat_message_received(data: GuiData, id: string) {
 	for (const peer of data.peers) {
 		for (const msg of peer.messages) {
 			if (msg.id === id) msg.received = true;
@@ -110,13 +114,13 @@ function on_chat_message_received(data: GuiData, id: string) {
 	return data;
 }
 
-function on_audio_new_input_devices(data: GuiData, debug_data: any) {}
+async function on_audio_new_input_devices(data: GuiData, debug_data: any) {}
 
-function on_audio_new_output_devices(data: GuiData, debug_data: any) {}
+async function on_audio_new_output_devices(data: GuiData, debug_data: any) {}
 
-function on_connection_statistics(data: GuiData, debug_data: any) {}
+async function on_connection_statistics(data: GuiData, debug_data: any) {}
 
-function on_transfer_statistics(
+async function on_transfer_statistics(
 	data: GuiData,
 	transfer_statistics: Map<String, TransferStatistics>
 ) {

@@ -1,3 +1,5 @@
+import { convert_attachment_file_name } from "./helpers";
+
 export class GuiData {
 	peers: UIPeer[] = [];
 	selected_peer?: UIPeer;
@@ -69,12 +71,35 @@ export interface IPreparedFile {
 	total_length: number;
 }
 
+export class GuiFile implements IPreparedFile {
+	file_id: string;
+	file_name: string;
+	file_extension: string;
+	total_length: number;
+	absolute_path?: string;
+
+	constructor(f: IPreparedFile) {
+		this.file_id = f.file_id;
+		this.file_name = f.file_name;
+		this.file_extension = f.file_extension;
+		this.total_length = f.total_length;
+	}
+
+	public async generate_absolute_path() {
+		this.absolute_path = await convert_attachment_file_name(
+			"downloads\\",
+			this.file_id,
+			this.file_extension
+		);
+	}
+}
+
 export class ChatMessage {
 	id: string;
 	author: NetworkedPublicKey;
 	recipient: NetworkedPublicKey;
 	msg: string;
-	attachments: IPreparedFile[] | undefined;
+	attachments: GuiFile[] | undefined;
 	dt: Date;
 
 	constructor(
@@ -89,8 +114,16 @@ export class ChatMessage {
 		this.author = new NetworkedPublicKey(author);
 		this.recipient = new NetworkedPublicKey(recipient);
 		this.msg = msg;
-		this.attachments = attachments;
+		this.attachments = attachments?.map((f) => new GuiFile(f));
 		this.dt = dt;
+	}
+
+	async generate_absolute_paths() {
+		if (this.attachments) {
+			for (const i in this.attachments) {
+				await this.attachments[i].generate_absolute_path();
+			}
+		}
 	}
 }
 

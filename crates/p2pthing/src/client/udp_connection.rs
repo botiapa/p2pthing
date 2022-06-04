@@ -1,8 +1,7 @@
 use std::{io, net::SocketAddr, rc::Rc, time::{Duration, Instant}};
 
 use mio::net::UdpSocket;
-use p2pthing_common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption}, message_type::{MsgEncryption, MsgType, UdpPacket}, statistics::ConnectionStatistics};
-use serde::Serialize;
+use p2pthing_common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption}, message_type::{MsgEncryption, MsgType, UdpPacket}, statistics::ConnectionStatistics, num, serde::Serialize};
 
 use super::connection_manager::{RELIABLE_MESSAGE_DELAY, KEEP_ALIVE_DELAY_MIDCALL, ANNOUNCE_DELAY, KEEP_ALIVE_DELAY, UdpHolder};
 
