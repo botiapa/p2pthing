@@ -276,13 +276,13 @@ impl ConnectionManager {
                                         // Socket is not ready anymore, stop reading
                                         break;
                                     }
-                                    Err(e) if e.kind() == ErrorKind::ConnectionReset || e.kind() == ErrorKind::NotConnected => {
+                                    Err(e) if e.kind() == ErrorKind::ConnectionReset || e.kind() == ErrorKind::NotConnected || e.kind() == ErrorKind::ConnectionRefused => {
                                         match e.kind() {
                                             ErrorKind::ConnectionReset => 
                                             self.ui_s.log_warning(&format!("Disconnected from rendezvous server, reconnecting in {}", RECONNECT_DELAY.as_secs())),
-                                            ErrorKind::NotConnected => 
+                                            ErrorKind::NotConnected | ErrorKind::ConnectionRefused => 
                                             self.ui_s.log_warning(&format!("Reconnecting failed to rendezvous server, retrying in {}", RECONNECT_DELAY.as_secs())),
-                                            _ => {}
+                                            _ => unreachable!()
                                         }
                                         
                                         self.poll.registry().deregister(&mut self.rendezvous_socket).unwrap();
