@@ -3,6 +3,9 @@ use p2pthing_common::ui::{UI, UIType};
 use p2pthing_gui::gui::Gui;
 use p2pthing_tui::tui::Tui;
 
+pub use p2pthing_common::serde;
+pub use p2pthing_common::enumset;
+
 
 pub fn start_client(ip: String, ui_type: UIType) {
     let mut ui = match ui_type {

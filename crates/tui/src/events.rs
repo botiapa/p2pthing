@@ -3,7 +3,7 @@ use std::{sync::{atomic::Ordering, mpsc::TryRecvError}, thread};
 use chrono::Utc;
 use crossterm::event::{Event, KeyCode, KeyModifiers, read};
 use num::FromPrimitive;
-use p2pthing_common::{debug_message::{DebugMessage, DebugMessageType}, message_type::{InterthreadMessage, Peer}, ui::{CHOOSABLE_KBITS, CallStatus, CallStatusHolder}};
+use p2pthing_common::{debug_message::{DebugMessage, DebugMessageType}, message_type::InterthreadMessage, ui::{CHOOSABLE_KBITS, CallStatus, CallStatusHolder}};
 
 use crate::tui::{ActiveBlock, TabIndex, Tui};
 

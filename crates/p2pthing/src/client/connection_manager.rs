@@ -1,13 +1,13 @@
 use p2pthing_common::mio_misc::{NotificationId, channel::channel, queue::NotificationQueue, self};
 use mio::{Interest, Poll, Waker, net::{TcpStream, UdpSocket}};
-use p2pthing_common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption}, message_type::{InterthreadMessage, MsgType, Peer, UdpPacket, msg_types::Call}};
+use p2pthing_common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption}, message_type::{InterthreadMessage, MsgType, UdpPacket, msg_types::Call}};
 use socket2::{Socket, Protocol, Type, Domain, SockAddr};
 use std::{collections::HashMap, net::{SocketAddr, Ipv4Addr}, rc::Rc, str::FromStr, sync::{Arc}, thread::{self, JoinHandle}, time::{Duration, Instant}};
 use p2pthing_common::mio_misc::channel::Sender;
 
 use mio::Token;
 
-use super::{file_manager::FileManager, udp_connection::{UdpConnection, UdpConnectionState}};
+use super::{file_manager::FileManager, udp_connection::{UdpConnection, UdpConnectionState}, peer::Peer};
 #[cfg(feature = "audio")]
 use super::audio::Audio;
 
@@ -53,7 +53,6 @@ pub struct ConnectionManager {
     udp_socket: Rc<UdpSocket>,
     multicast_socket: UdpSocket,
     peers: Vec<Peer>,
-    udp_connections: Vec<UdpConnection>,
     poll: Poll,
     cm_s: Sender<InterthreadMessage>,
     ui_s: Sender<InterthreadMessage>,
@@ -71,6 +70,7 @@ pub struct ConnectionManager {
     msg_confirmations: HashMap<u32, String>
 }
 
+#[derive(Debug)]
 pub struct UdpHolder {
     pub packet: UdpPacket,
     pub last_send: Instant,
@@ -132,7 +132,6 @@ impl ConnectionManager {
             udp_socket: udp_socket.clone(),
             multicast_socket,
             peers: Vec::new(),
-            udp_connections,
             poll,
             cm_s: cm_s.clone(),
             ui_s,

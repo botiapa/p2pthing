@@ -5,18 +5,19 @@ use p2pthing_common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, Sym
 
 use super::connection_manager::{RELIABLE_MESSAGE_DELAY, KEEP_ALIVE_DELAY_MIDCALL, ANNOUNCE_DELAY, KEEP_ALIVE_DELAY, UdpHolder};
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub enum UdpConnectionState {
     /// The punch through is currently being done
-    MidCall=0, 
+    MidCall=1, 
     /// The socket is 'connected' so only keep alive packets need to be sent
-    Connected=1,
+    Connected=2,
     /// The socket is waiting for the server to accept the announce
-    Unannounced=2,
+    Unannounced=3,
     /// We are waiting for the ui to decide whether we should start connecting
-    Pending=3
+    Pending=4
 }
 
+#[derive(Debug)]
 pub struct UdpConnection {
     pub associated_peer: Option<NetworkedPublicKey>,
     pub address: SocketAddr,

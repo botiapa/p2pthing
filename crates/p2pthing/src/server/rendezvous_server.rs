@@ -2,8 +2,8 @@ use std::{collections::HashMap, env, net::SocketAddr, str::FromStr};
 //use scrap;
 use mio::{Interest, Poll, Token, net::UdpSocket};
 use mio::net::{TcpListener, TcpStream};
-use p2pthing_common::encryption::{AsymmetricEncryption, SymmetricEncryption};
-use p2pthing_common::message_type::{MsgType, Peer, msg_types};
+use p2pthing_common::encryption::{AsymmetricEncryption, SymmetricEncryption, NetworkedPublicKey};
+use p2pthing_common::message_type::{MsgType, msg_types};
 
 mod event_loop;
 mod utils;
@@ -11,8 +11,21 @@ mod tcp_message;
 mod udp_message;
 
 struct CallRequest {
-    caller: Peer,
-    callee: Peer
+    caller: ServerPeer,
+    callee: ServerPeer
+}
+
+struct ServerPeer {
+    pub public_key: NetworkedPublicKey,
+    pub addr: Option<SocketAddr>,
+    pub udp_addr: Option<SocketAddr>,
+    pub sym_key: Option<SymmetricEncryption>
+}
+
+impl Clone for ServerPeer {
+    fn clone(&self) -> Self {
+        Self { public_key: self.public_key.clone(), addr: self.addr.clone(), udp_addr: self.udp_addr.clone(), sym_key: None }
+    }
 }
 
 pub struct RendezvousServer {
@@ -25,7 +38,7 @@ pub struct RendezvousServer {
     /// List of pending symmetric keys
     sym_keys: HashMap<SocketAddr, SymmetricEncryption>,
     /// List of announced peers
-    peers: Vec<Peer>,
+    peers: Vec<ServerPeer>,
     /// List of ongoing calls
     calls: Vec<CallRequest>,
     encryption: AsymmetricEncryption,

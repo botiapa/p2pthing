@@ -7,3 +7,4 @@ pub mod udp_connection;
 pub mod audio;
 
 mod file_manager;
+mod peer;

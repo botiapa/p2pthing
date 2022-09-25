@@ -1,7 +1,9 @@
 use std::net::SocketAddr;
 
 use mio::Token;
-use p2pthing_common::{encryption::SymmetricEncryption, message_type::{MsgType, Peer, msg_types::{self, AnnouncePublic, AnnounceSecret, Call, CallResponse}, PeerSource}, read_exact, num};
+use p2pthing_common::{encryption::SymmetricEncryption, message_type::{MsgType, msg_types::{self, AnnouncePublic, AnnounceSecret, Call, CallResponse}}, read_exact, num};
+
+use crate::server::rendezvous_server::ServerPeer;
 
 use super::{CallRequest, RendezvousServer};
 
@@ -15,7 +17,7 @@ impl RendezvousServer {
         read_exact(sock, &mut encrypted[..]);
 
         let mut msg = match self.sym_keys.get(&addr) {
-            Some(sym_key) => sym_key.decrypt(&mut encrypted[..]), // Peer has already announce, use the symmetric key
+            Some(sym_key) => sym_key.decrypt(&mut encrypted[..]), // Peer has already announced itself, use the symmetric key
             None => {
                 match self.peers.iter().find(|p| p.addr.unwrap() == addr) {
                     Some(p) => p.sym_key.as_ref().unwrap().decrypt(&mut encrypted[..]),
@@ -55,22 +57,21 @@ impl RendezvousServer {
     }
 
     fn on_announce(&mut self, addr: SocketAddr, announcement: AnnouncePublic) {
-        let p = Peer {
+        let p = ServerPeer {
             addr: Some(addr),
             udp_addr: None,
             public_key: announcement.public_key,
-            source: PeerSource::Rendezvous.into(),
             sym_key: Some(self.sym_keys.remove(&addr).unwrap())
         };
         println!("Received public key for peer ({}): {}", p.addr.unwrap(), p.public_key);
 
         // Notify the new client of the connections
         let sock = self.tcp_connections.iter_mut().find(|(_, c)| c.peer_addr().unwrap() == addr).unwrap().1;
-        RendezvousServer::send_tcp_message(sock, MsgType::Announce, &self.peers.to_vec().iter_mut().map(|x| x.safe_clone()).collect::<Vec<_>>());
+        RendezvousServer::send_tcp_message(sock, MsgType::Announce, &self.peers.to_vec().iter_mut().map(|x| x.public_key.clone()).collect::<Vec<_>>());
         
         // Notify everyone else of the new connection
         for c in self.tcp_connections.values_mut().filter(|c| c.peer_addr().unwrap() != addr) {
-            RendezvousServer::send_tcp_message(c, MsgType::Announce, &[p.safe_clone()].to_vec());
+            RendezvousServer::send_tcp_message(c, MsgType::Announce, &[p.public_key.clone()].to_vec());
         }
         self.peers.push(p); 
     }

@@ -1,7 +1,9 @@
 use std::net::SocketAddr;
 
 use mio::Token;
-use p2pthing_common::{encryption::SymmetricEncryption, message_type::{InterthreadMessage, MsgType, Peer, msg_types::{self, AnnounceRequest, AnnounceSecret, Call, CallResponse, Disconnect}}, read_exact, ui::UIConn, num};
+use p2pthing_common::{encryption::{SymmetricEncryption, NetworkedPublicKey}, message_type::{InterthreadMessage, MsgType, msg_types::{self, AnnounceRequest, AnnounceSecret, Call, CallResponse, Disconnect}}, read_exact, ui::UIConn, num};
+
+use crate::client::peer::{Peer, PeerSource};
 
 use super::{ConnectionManager, UdpConnection, UdpConnectionState};
 
@@ -24,7 +26,7 @@ impl ConnectionManager {
                 self.on_announce_request(addr, announcement);
             }
             Some(MsgType::Announce) => {
-                let peers: Vec<Peer> = bincode::deserialize(&msg).unwrap();
+                let peers: Vec<NetworkedPublicKey> = bincode::deserialize(&msg).unwrap();
                 self.on_tcp_announce(addr, peers);
             }
             Some(MsgType::Call) => {
@@ -60,13 +62,20 @@ impl ConnectionManager {
         self.send_tcp_message(MsgType::Announce, &announce_public).unwrap();
     }
 
-    fn on_tcp_announce(&mut self, _: SocketAddr, peers: Vec<Peer>) {
+    fn on_tcp_announce(&mut self, _: SocketAddr, peers: Vec<NetworkedPublicKey>) {
         for new_p in peers {
-            if !self.peers.iter().any(|p| p.public_key == new_p.public_key) {
-                self.peers.push(new_p);
+            if !self.peers.iter().any(|p| p.public_key == new_p) {
+                self.peers.push(Peer {
+                    addr: None,
+                    udp_addr: None,
+                    public_key: new_p,
+                    source: PeerSource::Rendezvous.into(),
+                    sym_key: None,
+                    udp_conn: None,
+                });
             }
         }
-        self.ui_s.send(InterthreadMessage::AnnounceResponse(self.peers.clone())).unwrap();
+        self.ui_s.send(InterthreadMessage::AnnounceResponse(self.peers.iter().map(|p| p.public_key.clone()).collect::<Vec<NetworkedPublicKey>>().clone())).unwrap();
     }
 
     /// Handle incoming call

@@ -4,9 +4,15 @@ use p2pthing_common::num;
 use p2pthing_common::{encryption::NetworkedPublicKey, message_type::MsgType, ui::UIConn};
 use p2pthing_common::serde::Serialize;
 
+use crate::client::udp_connection::UdpConnection;
+
 use super::ConnectionManager;
 
 impl ConnectionManager {
+    pub fn get_conn(&self, public_key: &NetworkedPublicKey) -> Option<&UdpConnection> {
+        self.peers.iter().find(|p| &p.public_key == public_key).map_or(None, |p| p.udp_conn.as_ref())
+    }
+
     pub fn send_tcp_message<T: ?Sized>(&mut self, t: MsgType, msg: &T) -> io::Result<()> where T: Serialize {
         let t: u8 = num::ToPrimitive::to_u8(&t).unwrap();
         let msg = &bincode::serialize(msg).unwrap()[..];

@@ -8,6 +8,7 @@ use rand_core::OsRng;
 use rsa::{BigUint, PaddingScheme, PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey, errors::Error};
 use serde::{Serialize, Deserialize};
 
+#[derive(Debug)]
 pub struct AsymmetricEncryption{
     public_key: RsaPublicKey,
     secret_key: RsaPrivateKey,

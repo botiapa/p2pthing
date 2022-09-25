@@ -1,8 +1,8 @@
 use std::net::SocketAddr;
 
-use p2pthing_common::{encryption::SymmetricEncryption, message_type::{InterthreadMessage, MsgType, UdpPacket, msg_types::{self, AnnounceSecret, AnnouncePublic}, Peer, PeerSource}, ui::UIConn, num};
+use p2pthing_common::{encryption::SymmetricEncryption, message_type::{InterthreadMessage, MsgType, UdpPacket, msg_types::{self, AnnounceSecret, AnnouncePublic}}, ui::UIConn, num};
 
-use crate::client::udp_connection::UdpConnectionState;
+use crate::client::{udp_connection::{UdpConnectionState, UdpConnection}, peer::{PeerSource, Peer}};
 
 use super::{ConnectionManager, MULTICAST_MAGIC};
 
@@ -84,7 +84,8 @@ impl ConnectionManager {
                 else {
                     self.peers.push(Peer {
                         addr: None,
-                        udp_addr: Some(addr),
+                        udp_addr: Some(addr.clone()),
+                        udp_conn: None,
                         public_key: announce.public_key.clone(),
                         sym_key: None,
                         source: PeerSource::Multicast.into(),

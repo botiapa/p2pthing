@@ -1,5 +1,4 @@
-use std::{collections::HashMap, net::SocketAddr, fmt::Display};
-use enumset::{EnumSetType, EnumSet};
+use std::{collections::HashMap, fmt::Display};
 use num_derive::{FromPrimitive, ToPrimitive};
 use serde::{Serialize, Deserialize};
 
@@ -7,7 +6,7 @@ use crate::statistics::{ConnectionStatistics, TransferStatistics};
 
 use self::msg_types::{ChatMessage, FileChunks, RequestFileChunks};
 
-use super::{debug_message::DebugMessageType, encryption::{NetworkedPublicKey, SymmetricEncryption}};
+use super::{debug_message::DebugMessageType, encryption::NetworkedPublicKey};
 
 pub type FileName = String;
 pub type MessageId = String;
@@ -20,7 +19,7 @@ pub enum InterthreadMessage {
     OnChatMessage(ChatMessage),
     /// - **From CM to UI:** Notify UI that a message has been received by the other peer. String is the id of the message.
     OnChatMessageReceived(String),
-    AnnounceResponse(Vec<Peer>),
+    AnnounceResponse(Vec<NetworkedPublicKey>),
     CallAccepted(NetworkedPublicKey),
     CallDenied(NetworkedPublicKey),
     PunchThroughSuccessfull(NetworkedPublicKey),
@@ -61,7 +60,7 @@ pub enum InterthreadMessage {
     WakeUp,
 }
 
-#[derive(ToPrimitive, FromPrimitive)]
+#[derive(Debug, ToPrimitive, FromPrimitive)]
 pub enum MsgType {
     Announce=0,
     AnnounceSecret=8,
@@ -78,66 +77,14 @@ pub enum MsgType {
     FileChunks=12
 }
 
-#[derive(EnumSetType, Serialize, Deserialize,  Debug)]
-pub enum PeerSource {
-    Multicast,
-    Rendezvous
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Peer {
-    pub addr: Option<SocketAddr>,
-    pub udp_addr: Option<SocketAddr>,
-    pub public_key: NetworkedPublicKey,
-    pub source: EnumSet<PeerSource>,
-    #[serde(skip)]
-    pub sym_key: Option<SymmetricEncryption>
-}
-
-impl Clone for Peer {
-    fn clone(&self) -> Self {
-        self.full_clone()
-    }
-}
-
-impl Peer {
-    
-    /// This is an unsafe clone because it can potentially leak ip adresses
-    fn full_clone(&self) -> Self {
-        Self {
-            public_key: self.public_key.clone(),
-            addr: self.addr.clone(),
-            udp_addr: self.udp_addr.clone(),
-            sym_key: None,
-            source: self.source.clone(),
-        }
-    }
-
-    /// This clone only copies public information
-    pub fn safe_clone(&self) -> Self{
-        Self {
-            public_key: self.public_key.clone(),
-            addr: None,
-            udp_addr: None,
-            sym_key: None,
-            source: self.source.clone()
-        }
-    }
-}
-
-impl PartialEq for Peer {
-    fn eq(&self, other: &Self) -> bool {
-        self.public_key == other.public_key
-    }
-}
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum MsgEncryption {
     Unencrypted,
     PublicKey,
     SymmetricKey
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct UdpPacket {
     pub data: Vec<u8>,
     pub reliable: bool,
