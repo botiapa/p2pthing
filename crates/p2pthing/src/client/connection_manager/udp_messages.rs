@@ -8,7 +8,7 @@ use super::{ConnectionManager, MULTICAST_MAGIC};
 
 impl ConnectionManager {
     pub fn read_udp_message(&mut self, _: usize, addr: SocketAddr, buf: &[u8]) {
-        let conn = match self.udp_connections.iter_mut().find(|x| x.address == addr) {
+        let conn = match self.peers.conn_mut(&addr) {
             Some(c) => c,
             None => {
                 self.ui_s.log_warning(&format!("Tried reading from ({}), but couldn't find the associated connection", addr));
@@ -68,8 +68,6 @@ impl ConnectionManager {
     }
 
     pub fn read_multicast_message(&mut self, _: usize, addr: SocketAddr, buf: &[u8]) {
-        //TODO: Move all this logic to udp_connection.rs
-
         // First u32 is the magic packet
         let magic = &buf[0..4];
         let magic: u32 = bincode::deserialize(magic).unwrap();
@@ -77,15 +75,15 @@ impl ConnectionManager {
             let announce: AnnouncePublic = bincode::deserialize(&buf[4..]).unwrap();
             // If the peer is not this peer
             if announce.public_key != self.encryption.get_public_key() {
-                if let Some(p) = self.peers.iter_mut().find(|x| x.public_key == announce.public_key) {
-                    p.udp_addr = Some(addr);
+                let conn = UdpConnection::new(UdpConnectionState::Unknown, addr, self.udp_socket.clone(), None, self.encryption.clone());
+                if let Some(p) = self.peers.peer_mut(&announce.public_key) {
+                    p.udp_conn = Some(conn);
                     p.source = p.source | PeerSource::Multicast;
                 }
                 else {
                     self.peers.push(Peer {
                         addr: None,
-                        udp_addr: Some(addr.clone()),
-                        udp_conn: None,
+                        udp_conn: Some(conn),
                         public_key: announce.public_key.clone(),
                         sym_key: None,
                         source: PeerSource::Multicast.into(),
@@ -98,8 +96,7 @@ impl ConnectionManager {
     }
 
     fn check_punchthrough(&mut self, addr: SocketAddr) {
-        let conn = self.udp_connections.iter_mut()
-        .find(|x| x.address == addr).unwrap();
+        let conn = self.peers.conn_mut(&addr).unwrap();
         match conn.state {
             UdpConnectionState::MidCall => {
                 let p = conn.associated_peer.clone().unwrap();
@@ -115,8 +112,7 @@ impl ConnectionManager {
         let secret: AnnounceSecret = bincode::deserialize(data).unwrap();
         let secret = &secret.secret[..];
 
-        let conn = self.udp_connections.iter_mut()
-        .find(|x| x.address == addr).unwrap();
+        let conn = self.peers.conn_mut(&addr).unwrap();
         
         conn.symmetric_key = Some(SymmetricEncryption::new_from_secret(secret));
         conn.upgraded = true;
@@ -127,8 +123,7 @@ impl ConnectionManager {
 
     fn on_confirmation_message(&mut self, addr: SocketAddr, data: &[u8]) {
         let id: u32 = bincode::deserialize(data).unwrap();
-        let conn = self.udp_connections.iter_mut()
-        .find(|x| x.address == addr).unwrap();
+        let conn = self.peers.conn_mut(&addr).unwrap();
 
         let removed = conn.sent_messages.iter_mut().position(|msg| msg.packet.msg_id == id).map(|i| conn.sent_messages.remove(i));
         match removed {
@@ -154,8 +149,7 @@ impl ConnectionManager {
     }
 
     fn on_udp_announce(&mut self, addr: SocketAddr) {
-        self.udp_connections.iter_mut()
-        .find(|x| x.address == addr).unwrap()
+        self.peers.conn_mut(&addr).unwrap()
         .state = UdpConnectionState::Connected;
         self.ui_s.log_info("UDP Announcement has been accepted");
     }
@@ -167,7 +161,7 @@ impl ConnectionManager {
 
     fn on_chat_message(&mut self, addr: SocketAddr, data: &[u8]) {
         let msg: msg_types::ChatMessage = bincode::deserialize(data).unwrap();
-        let p = self.peers.iter().find(|p| p.udp_addr.unwrap() == addr).unwrap();
+        let p = self.peers.peer_by_addr(&addr).unwrap();
         self.ui_s.send(InterthreadMessage::OnChatMessage(msg.clone())).unwrap();
         
         //TODO: Ability to accept or deny file download
@@ -183,14 +177,14 @@ impl ConnectionManager {
     #[cfg(feature = "audio")]
     fn on_opus_packet(&mut self, addr: SocketAddr, data: &[u8]) {
         let data: Vec<u8> = bincode::deserialize(data).unwrap();
-        let p = self.peers.iter().find(|p| p.udp_addr.unwrap() == addr).unwrap();
+        let p = self.peers.peer_by_addr(&addr).unwrap();
 
         self.audio.decode_and_queue_packet(&data[..], p.public_key.clone());
     }
 
     fn on_request_file_chunks(&mut self, addr: SocketAddr, data: &[u8]) {
         let data: msg_types::RequestFileChunks = bincode::deserialize(data).unwrap();
-        let p = self.peers.iter().find(|p| p.udp_addr.unwrap() == addr).unwrap();
+        let p = self.peers.peer_by_addr(&addr).unwrap();
         let public_key = p.public_key.clone();
 
         //TODO: Ability to accept or deny file download

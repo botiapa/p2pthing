@@ -7,6 +7,8 @@ use super::connection_manager::{RELIABLE_MESSAGE_DELAY, KEEP_ALIVE_DELAY_MIDCALL
 
 #[derive(Debug, PartialEq)]
 pub enum UdpConnectionState {
+    /// We haven't contacted the peer yet, and no connection has been started by either side
+    Unknown=0,
     /// The punch through is currently being done
     MidCall=1, 
     /// The socket is 'connected' so only keep alive packets need to be sent
@@ -91,7 +93,7 @@ impl UdpConnection{
         Ok(())
     }
 
-    /// Send a UDP packet encrypted with the public, which optionally can be reliable
+    /// Send a UDP packet encrypted with the public key, which optionally can be reliable
     pub fn send_udp_message_with_public_key<T: ?Sized>(&mut self, msg_type: MsgType, msg: &T, reliable: bool, custom_id: Option<u32>) -> Result<(), String> where T: Serialize  {
         let t: u8 = num::ToPrimitive::to_u8(&msg_type).unwrap();
         let msg = &bincode::serialize(msg).unwrap()[..];
@@ -155,6 +157,7 @@ impl UdpConnection{
 
     pub fn next_keep_alive(&mut self) -> Duration {
         let delay = match self.state {
+            UdpConnectionState::Unknown => Duration::new(u64::MAX, 0),
             UdpConnectionState::MidCall => KEEP_ALIVE_DELAY_MIDCALL,
             UdpConnectionState::Connected => KEEP_ALIVE_DELAY,
             UdpConnectionState::Unannounced => ANNOUNCE_DELAY,

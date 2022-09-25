@@ -68,6 +68,7 @@ impl ConnectionStatistics {
         }
     }
 
+    /// Register a new ping data point
     pub fn new_ping(&mut self, ping: Duration) {
         self.pings.push(ping);
     }

@@ -7,7 +7,7 @@ use p2pthing_common::mio_misc::channel::Sender;
 
 use mio::Token;
 
-use super::{file_manager::FileManager, udp_connection::{UdpConnection, UdpConnectionState}, peer::Peer};
+use super::{file_manager::FileManager, udp_connection::{UdpConnection, UdpConnectionState}, peer::{Peer, PeerList}};
 #[cfg(feature = "audio")]
 use super::audio::Audio;
 
@@ -52,7 +52,7 @@ pub struct ConnectionManager {
     rendezvous_public_key: Option<NetworkedPublicKey>,
     udp_socket: Rc<UdpSocket>,
     multicast_socket: UdpSocket,
-    peers: Vec<Peer>,
+    peers: PeerList,
     poll: Poll,
     cm_s: Sender<InterthreadMessage>,
     ui_s: Sender<InterthreadMessage>,
@@ -117,6 +117,7 @@ impl ConnectionManager {
 
         let udp_socket = Rc::new(udp_socket);
         let encryption = Rc::new(encryption);
+        // Add the rendezvous server as an UDP connection
         udp_connections.push(UdpConnection::new(
             UdpConnectionState::Unannounced, 
             rend_ip, 
@@ -131,7 +132,7 @@ impl ConnectionManager {
             rendezvous_public_key: None,
             udp_socket: udp_socket.clone(),
             multicast_socket,
-            peers: Vec::new(),
+            peers: PeerList::default(),
             poll,
             cm_s: cm_s.clone(),
             ui_s,

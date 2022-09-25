@@ -18,7 +18,7 @@ impl ConnectionManager {
             let mut events = Events::with_capacity(1024);
 
             #[cfg(feature = "audio")]
-            if !self.audio.started && self.udp_connections.iter().any(|c| c.upgraded && c.associated_peer.is_some()) {
+            if !self.audio.started && self.peers.connections().any(|c| c.upgraded && c.associated_peer.is_some()) {
                 self.audio.init();
             }
 
@@ -57,7 +57,7 @@ impl ConnectionManager {
     }
 
     fn send_keep_alive_messages(&mut self) {
-        for conn in &mut self.udp_connections {
+        for conn in &mut self.peers.connections_mut() {
             match conn.state {
                 UdpConnectionState::MidCall | UdpConnectionState::Connected => {
                     let delay = match conn.state { 
@@ -94,7 +94,7 @@ impl ConnectionManager {
                         }
                     }
                 }
-                UdpConnectionState::Pending => {}
+                UdpConnectionState::Unknown | UdpConnectionState::Pending => {}
             };
         }
     }
@@ -115,7 +115,7 @@ impl ConnectionManager {
     }
 
     fn send_reliable_messages(&mut self) {
-        for conn in &mut self.udp_connections {
+        for conn in &mut self.peers.connections_mut() {
             match conn.state {
                 UdpConnectionState::Connected => {
                     conn.resend_reliable_messages();
@@ -157,7 +157,7 @@ impl ConnectionManager {
                         },
                         #[cfg(feature = "audio")]
                         InterthreadMessage::OpusPacketReady(data) => {
-                            for conn in &mut self.udp_connections {
+                            for conn in &mut self.peers.connections_mut() {
                                 if conn.upgraded && conn.associated_peer.is_some() {
                                     conn.send_udp_message(MsgType::OpusPacket, &data, false, None).unwrap() // TODO: Indexing packets
                                 }
@@ -183,12 +183,10 @@ impl ConnectionManager {
 
                             self.send_tcp_message(MsgType::CallResponse, &msg).unwrap();
 
-                            let conn = self.udp_connections.iter_mut().find(|c| c.associated_peer.is_some() && c.associated_peer.clone().unwrap() == p).unwrap();
-                            conn.state = UdpConnectionState::MidCall;
-                            let peer = self.peers.iter_mut().find(|peer| peer.public_key == p).unwrap();
-                            peer.udp_addr = Some(conn.address);
+                            let p = self.peers.peer_mut(&p).unwrap();
+                            p.udp_conn.as_mut().unwrap().state = UdpConnectionState::MidCall;
                             
-                            self.ui_s.log_info(&format!("Accepted call from peer ({};{}), starting the punch through protocol", p, conn.address));
+                            self.ui_s.log_info(&format!("Accepted call from peer ({};{}), starting the punch through protocol", p.public_key, p.udp_conn.as_ref().unwrap().address));
                         }
                         InterthreadMessage::CallDenied(p) => {
                             let msg = msg_types::CallResponse {
@@ -202,14 +200,15 @@ impl ConnectionManager {
 
                             self.send_tcp_message(MsgType::CallResponse, &msg).unwrap();
 
-                            let i = self.udp_connections.iter().position(|c| c.associated_peer.is_some() && c.associated_peer.clone().unwrap() == p).unwrap();
-                            let conn = self.udp_connections.remove(i);
-                            self.ui_s.log_info(&format!("Denied call from peer ({};{})", p, conn.address));
+                            let p = self.peers.peer_mut(&p).unwrap();
+                            let conn = p.udp_conn.take().unwrap();
+
+                            self.ui_s.log_info(&format!("Denied call from peer ({};{})", p.public_key, conn.address));
                         }
                         InterthreadMessage::Call(p) => {
-                            let peer = self.peers.iter().find(|peer| peer.public_key == p).unwrap(); //FIXME: Unwrap err here
+                            let peer = self.peers.peer(&p).unwrap(); //FIXME: Unwrap err here
                             // FIXME: Knowing the UDP address does not mean we are connected
-                            if peer.udp_addr.is_some() {
+                            if peer.udp_conn.is_some() {
                                 self.ui_s.log_warning(&format!("Tried to call a peer which is already connected {}", p));
                                 continue;
                             }
@@ -348,7 +347,7 @@ impl ConnectionManager {
         if self.last_stats_update.elapsed() > STATS_UPDATE_DELAY {
             let transfer_stats = self.file_manager.transfer_statistics.clone();
             let mut conn_stats = vec![];
-            for c in &mut self.udp_connections {
+            for c in &mut self.peers.connections() {
                 if let Some(p) = &c.associated_peer {
                     conn_stats.push((p.clone(), c.statistics.clone()));
                 }
@@ -362,7 +361,7 @@ impl ConnectionManager {
 
     /// Lists the next timeouts, and also sorts the list, so the first one is always the smallest
     fn get_next_timeouts(&mut self, durations: &mut Vec<Duration>) {
-        for conn in &mut self.udp_connections {
+        for conn in &mut self.peers.connections_mut() {
             match conn.next_resendable() {
                 Some(d) => durations.push(d),
                 None => {}

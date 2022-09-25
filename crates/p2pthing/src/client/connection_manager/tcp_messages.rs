@@ -47,8 +47,7 @@ impl ConnectionManager {
     }
 
     fn on_announce_request(&mut self, addr: SocketAddr, announcement: AnnounceRequest) {
-        let conn = self.udp_connections.iter()
-        .find(|x| x.address == addr).unwrap();
+        let conn = self.peers.conn(&addr).unwrap();
 
         self.rendezvous_public_key = Some(announcement.public_key);
         let announce_secret = msg_types::AnnounceSecret {
@@ -64,10 +63,10 @@ impl ConnectionManager {
 
     fn on_tcp_announce(&mut self, _: SocketAddr, peers: Vec<NetworkedPublicKey>) {
         for new_p in peers {
-            if !self.peers.iter().any(|p| p.public_key == new_p) {
+            // If the peer is not already in the peerlist
+            if self.peers.peer(&new_p).is_none() {
                 self.peers.push(Peer {
                     addr: None,
-                    udp_addr: None,
                     public_key: new_p,
                     source: PeerSource::Rendezvous.into(),
                     sym_key: None,
@@ -75,7 +74,7 @@ impl ConnectionManager {
                 });
             }
         }
-        self.ui_s.send(InterthreadMessage::AnnounceResponse(self.peers.iter().map(|p| p.public_key.clone()).collect::<Vec<NetworkedPublicKey>>().clone())).unwrap();
+        self.ui_s.send(InterthreadMessage::AnnounceResponse(self.peers.inner.iter().map(|p| p.public_key.clone()).collect::<Vec<NetworkedPublicKey>>().clone())).unwrap();
     }
 
     /// Handle incoming call
@@ -85,7 +84,9 @@ impl ConnectionManager {
 
         let mut conn = UdpConnection::new(UdpConnectionState::Pending, udp_address, self.udp_socket.clone(), None, self.encryption.clone());
         conn.associated_peer = Some(caller.clone());
-        self.udp_connections.push(conn);
+
+        let p = self.peers.peer_mut(&caller.clone()).unwrap();
+        p.udp_conn = Some(conn);
 
         // Notify the UI of the incoming call
         self.ui_s.send(InterthreadMessage::Call(caller)).unwrap();
@@ -104,8 +105,7 @@ impl ConnectionManager {
         else {
             let udp_address = call.udp_address.unwrap();
         
-            let p = self.peers.iter_mut().find(|p| p.public_key == call.callee).unwrap();
-            p.udp_addr = Some(udp_address);
+            let p = self.peers.peer_mut(&call.callee).unwrap();
             
             if let Some(i) = self.calls_in_progress.iter().position(|(c, _)| c.callee == call.callee) {
                 self.calls_in_progress.remove(i);
@@ -118,8 +118,8 @@ impl ConnectionManager {
     
                 conn.send_udp_message_with_public_key(MsgType::AnnounceSecret, &AnnounceSecret{secret: conn.symmetric_key.as_ref().unwrap().secret.clone()}, true, None).unwrap();
     
+                p.udp_conn = Some(conn);
                 self.ui_s.send(InterthreadMessage::CallAccepted(p.public_key.clone())).unwrap();
-                self.udp_connections.push(conn);
             }
             else {
                 self.ui_s.log_warning(
@@ -129,19 +129,9 @@ impl ConnectionManager {
     }
 
     fn on_disconnect(&mut self, _: SocketAddr, disconnect_peer: Disconnect) {
-        let p = self.peers.iter_mut().find(|p| p.public_key == disconnect_peer.public_key).unwrap();
+        let p = self.peers.peer_mut(&disconnect_peer.public_key).unwrap();
         self.ui_s.log_info(&format!("Peer ({}) disconnected", p.public_key));
-        match p.udp_addr {
-            Some(addr) => {
-                self.udp_connections.iter_mut()
-                .position(|conn| conn.address == addr)
-                .map(|i| self.udp_connections.remove(i)).unwrap();
-            }
-            None => {}
-        }
-        self.peers.iter_mut()
-        .position(|p| p.public_key == disconnect_peer.public_key)
-        .map(|i| self.peers.remove(i));
+        self.peers.remove(&disconnect_peer.public_key);
         self.ui_s.send(InterthreadMessage::PeerDisconnected(disconnect_peer.public_key)).unwrap();
     }
 }
