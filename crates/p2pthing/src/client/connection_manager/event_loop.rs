@@ -1,15 +1,31 @@
-use std::{io::{self, Read}, net::Shutdown, sync::mpsc::{self, Receiver}, thread, time::{Duration, Instant}};
+use std::{
+    io::{self, Read},
+    net::Shutdown,
+    sync::mpsc::{self, Receiver},
+    thread,
+    time::{Duration, Instant},
+};
 
 use base64::encode_config;
 use chrono::Utc;
 use io::ErrorKind;
-use mio::{Events, Interest, net::TcpStream};
-use p2pthing_common::{message_type::{InterthreadMessage, MsgType, msg_types::{self, AnnouncePublic}}, ui::UIConn};
+use mio::{net::TcpStream, Events, Interest};
 use p2pthing_common::sha2::{Digest, Sha256};
+use p2pthing_common::{
+    message_type::{
+        msg_types::{self, AnnouncePublic},
+        InterthreadMessage, MsgType,
+    },
+    ui::UIConn,
+};
 
 use crate::client::udp_connection::UdpConnectionState;
 
-use super::{ANNOUNCE_DELAY, CALL_DECAY, ConnectionManager, KEEP_ALIVE_DELAY, KEEP_ALIVE_DELAY_MIDCALL, RECONNECT_DELAY, RENDEZVOUS, STATS_UPDATE_DELAY, UDP_SOCKET, WAKER, BROADCAST_DELAY, MULTICAST_SOCKET, MULTICAST_ADDRESS, MULTICAST_MAGIC};
+use super::{
+    ConnectionManager, ANNOUNCE_DELAY, BROADCAST_DELAY, CALL_DECAY, KEEP_ALIVE_DELAY, KEEP_ALIVE_DELAY_MIDCALL,
+    MULTICAST_ADDRESS, MULTICAST_MAGIC, MULTICAST_SOCKET, RECONNECT_DELAY, RENDEZVOUS, STATS_UPDATE_DELAY, UDP_SOCKET,
+    WAKER,
+};
 
 impl ConnectionManager {
     pub fn event_loop(&mut self, r: &mut Receiver<InterthreadMessage>) {
@@ -42,7 +58,7 @@ impl ConnectionManager {
             // Send reliable messages
             self.send_reliable_messages();
 
-            // Handle interthread messages 
+            // Handle interthread messages
             self.handle_interthread_messages(r, &mut running);
 
             // Handle IO events
@@ -50,7 +66,7 @@ impl ConnectionManager {
 
             // Check for new requestable chunks
             self.check_new_chunks();
-        
+
             // Send UI updates
             self.send_ui_updates();
         }
@@ -60,10 +76,10 @@ impl ConnectionManager {
         for conn in &mut self.peers.connections_mut() {
             match conn.state {
                 UdpConnectionState::MidCall | UdpConnectionState::Connected => {
-                    let delay = match conn.state { 
+                    let delay = match conn.state {
                         UdpConnectionState::MidCall => KEEP_ALIVE_DELAY_MIDCALL,
                         UdpConnectionState::Connected => KEEP_ALIVE_DELAY,
-                        _ => unreachable!()
+                        _ => unreachable!(),
                     };
                     match conn.last_message_sent {
                         Some(time) if time.elapsed() < delay => {}
@@ -78,31 +94,25 @@ impl ConnectionManager {
                                     self.ui_s.log_info("Sent keep alive message to the rendezvous server");
                                 }
                             }
-                            
                         }
                     }
                 }
-                UdpConnectionState::Unannounced => {
-                    match conn.last_announce {
-                        Some(time) if time.elapsed() < ANNOUNCE_DELAY => {}
-                        None | _ => {
-                            let announce = msg_types::AnnouncePublic {
-                                public_key: self.encryption.get_public_key()
-                            };
-                            conn.send_raw_message(MsgType::Announce, &announce, false, None);
-                            conn.last_announce = Some(Instant::now());
-                        }
+                UdpConnectionState::Unannounced => match conn.last_announce {
+                    Some(time) if time.elapsed() < ANNOUNCE_DELAY => {}
+                    None | _ => {
+                        let announce = msg_types::AnnouncePublic { public_key: self.encryption.get_public_key() };
+                        conn.send_raw_message(MsgType::Announce, &announce, false, None);
+                        conn.last_announce = Some(Instant::now());
                     }
-                }
+                },
                 UdpConnectionState::Unknown | UdpConnectionState::Pending => {}
             };
         }
     }
 
-   
     fn send_multicast_messages(&mut self) {
         if self.last_broadcast.elapsed() > BROADCAST_DELAY {
-            let announce = AnnouncePublic{ public_key: self.encryption.get_public_key().clone() };
+            let announce = AnnouncePublic { public_key: self.encryption.get_public_key().clone() };
             let mut announce = bincode::serialize(&announce).unwrap();
             let mut magic = bincode::serialize(&MULTICAST_MAGIC).unwrap();
             magic.append(&mut announce);
@@ -111,7 +121,6 @@ impl ConnectionManager {
             self.ui_s.log_info(&"Sent broadcast message");
             self.last_broadcast = Instant::now();
         }
-        
     }
 
     fn send_reliable_messages(&mut self) {
@@ -119,7 +128,7 @@ impl ConnectionManager {
             match conn.state {
                 UdpConnectionState::Connected => {
                     conn.resend_reliable_messages();
-                },
+                }
                 _ => {}
             };
         }
@@ -135,40 +144,71 @@ impl ConnectionManager {
                                 Some(files) => match self.file_manager.send_files(files) {
                                     Ok(files) => Some(files),
                                     Err(e) => {
-                                        self.ui_s.log_error(&format!("Error while trying to send a file send request: {}", e.to_string()));
+                                        self.ui_s.log_error(&format!(
+                                            "Error while trying to send a file send request: {}",
+                                            e.to_string()
+                                        ));
                                         continue;
-                                    },
+                                    }
                                 },
-                                None => None
+                                None => None,
                             };
                             let dt = Utc::now();
-                            let msg_id = [&msg.as_bytes(), &dt.timestamp().to_be_bytes()[..], &dt.timestamp_subsec_micros().to_be_bytes()[..]].concat();
+                            let msg_id = [
+                                &msg.as_bytes(),
+                                &dt.timestamp().to_be_bytes()[..],
+                                &dt.timestamp_subsec_micros().to_be_bytes()[..],
+                            ]
+                            .concat();
                             let msg_id = Sha256::digest(&msg_id);
                             let msg_id = encode_config(msg_id, base64::URL_SAFE);
-                            
-                            let msg = msg_types::ChatMessage {author: self.encryption.get_public_key(), recipient: p.clone(), msg, attachments: files, id: msg_id, dt};
-                            
+
+                            let msg = msg_types::ChatMessage {
+                                author: self.encryption.get_public_key(),
+                                recipient: p.clone(),
+                                msg,
+                                attachments: files,
+                                id: msg_id,
+                                dt,
+                            };
+
                             self.msg_confirmations.insert(self.next_custom_id, msg.id.clone());
                             self.ui_s.send(InterthreadMessage::OnChatMessage(msg.clone())).unwrap();
                             match self.send_udp_message(Some(p), MsgType::ChatMessage, &msg, true, true) {
                                 Ok(_) => {}
-                                Err(e) => self.ui_s.log_error(&format!("Error while trying to send a chat message: {}", e.to_string()))
+                                Err(e) => self.ui_s.log_error(&format!(
+                                    "Error while trying to send a chat message: {}",
+                                    e.to_string()
+                                )),
                             }
-                        },
+                        }
                         #[cfg(feature = "audio")]
                         InterthreadMessage::OpusPacketReady(data) => {
                             for conn in &mut self.peers.connections_mut() {
                                 if conn.upgraded && conn.associated_peer.is_some() {
-                                    conn.send_udp_message(MsgType::OpusPacket, &data, false, None).unwrap() // TODO: Indexing packets
+                                    conn.send_udp_message(MsgType::OpusPacket, &data, false, None).unwrap()
+                                    // TODO: Indexing packets
                                 }
                             }
                         }
                         #[cfg(feature = "audio")]
-                        InterthreadMessage::AudioDataReadyToBeProcessed(data) => self.audio.process_and_send_packet(data),
-                        InterthreadMessage::OnChatMessage(msg) => self.ui_s.send(InterthreadMessage::OnChatMessage(msg)).unwrap(),
+                        InterthreadMessage::AudioDataReadyToBeProcessed(data) => {
+                            self.audio.process_and_send_packet(data)
+                        }
+                        InterthreadMessage::OnChatMessage(msg) => {
+                            self.ui_s.send(InterthreadMessage::OnChatMessage(msg)).unwrap()
+                        }
                         InterthreadMessage::ConnectToServer() => {
-                            self.rendezvous_socket = TcpStream::connect(self.rendezvous_ip).unwrap();
-                            self.poll.registry().register(&mut self.rendezvous_socket, RENDEZVOUS, Interest::READABLE).unwrap();
+                            let rendezvous =
+                                self.peers.rendezvous_servers_mut().next().expect("No rendezvous server found");
+                            rendezvous.tcp_conn = Some(
+                                TcpStream::connect(self.rendezvous_ip)
+                                    .expect("Failed to connect to TCP rendezvous server socket"),
+                            );
+                            self.poll
+                                .registry()
+                                .register(rendezvous.tcp_conn.as_mut().unwrap(), RENDEZVOUS, Interest::READABLE)
+                                .unwrap();
                             self.ui_s.log_info("Trying to connect to server");
                         }
                         InterthreadMessage::CallAccepted(p) => {
@@ -176,26 +216,30 @@ impl ConnectionManager {
                                 call: msg_types::Call {
                                     callee: self.encryption.get_public_key().clone(),
                                     caller: Some(p.clone()),
-                                    udp_address: None
+                                    udp_address: None,
                                 },
-                                response: true
+                                response: true,
                             };
 
                             self.send_tcp_message(MsgType::CallResponse, &msg).unwrap();
 
                             let p = self.peers.peer_mut(&p).unwrap();
                             p.udp_conn.as_mut().unwrap().state = UdpConnectionState::MidCall;
-                            
-                            self.ui_s.log_info(&format!("Accepted call from peer ({};{}), starting the punch through protocol", p.public_key, p.udp_conn.as_ref().unwrap().address));
+
+                            self.ui_s.log_info(&format!(
+                                "Accepted call from peer ({};{}), starting the punch through protocol",
+                                p.public_key.as_ref().unwrap(),
+                                p.udp_conn.as_ref().unwrap().address
+                            ));
                         }
                         InterthreadMessage::CallDenied(p) => {
                             let msg = msg_types::CallResponse {
                                 call: msg_types::Call {
                                     callee: self.encryption.get_public_key().clone(),
                                     caller: Some(p.clone()),
-                                    udp_address: None
+                                    udp_address: None,
                                 },
-                                response: false
+                                response: false,
                             };
 
                             self.send_tcp_message(MsgType::CallResponse, &msg).unwrap();
@@ -203,27 +247,33 @@ impl ConnectionManager {
                             let p = self.peers.peer_mut(&p).unwrap();
                             let conn = p.udp_conn.take().unwrap();
 
-                            self.ui_s.log_info(&format!("Denied call from peer ({};{})", p.public_key, conn.address));
+                            self.ui_s.log_info(&format!(
+                                "Denied call from peer ({};{})",
+                                p.public_key.as_ref().unwrap(),
+                                conn.address
+                            ));
                         }
                         InterthreadMessage::Call(p) => {
                             let peer = self.peers.peer(&p).unwrap(); //FIXME: Unwrap err here
-                            // FIXME: Knowing the UDP address does not mean we are connected
-                            if peer.udp_conn.is_some() {
-                                self.ui_s.log_warning(&format!("Tried to call a peer which is already connected {}", p));
-                                continue;
+                                                                     // FIXME: Knowing the UDP address does not mean we are connected
+                            if let Some(conn) = peer.udp_conn.as_ref() {
+                                if conn.state == UdpConnectionState::Connected {
+                                    self.ui_s
+                                        .log_warning(&format!("Tried to call a peer which is already connected {}", p));
+                                    continue;
+                                }
                             }
-                            let call = msg_types::Call {
-                                callee: p.clone(),
-                                caller: None,
-                                udp_address: None
-                            };
+                            let call = msg_types::Call { callee: p.clone(), caller: None, udp_address: None };
                             match self.calls_in_progress.iter().find(|(c, _)| c == &call) {
-                                Some(_) => self.ui_s.log_warning(&format!("Tried to call a peer which has already been called: {}", p),),
+                                Some(_) => self
+                                    .ui_s
+                                    .log_warning(&format!("Tried to call a peer which has already been called: {}", p)),
                                 None => {
                                     self.ui_s.log_info(&format!("Calling peer: {}", p));
-                            
+
                                     self.calls_in_progress.push((call.clone(), Instant::now()));
-                                    self.send_tcp_message(MsgType::Call, &call).unwrap(); //TODO: Error handling
+                                    self.send_tcp_message(MsgType::Call, &call).unwrap();
+                                    //TODO: Error handling
                                 }
                             }
                         }
@@ -232,24 +282,35 @@ impl ConnectionManager {
                         #[cfg(feature = "audio")]
                         InterthreadMessage::AudioChangeOutputDevice(d) => self.audio.change_output_device(d),
                         #[cfg(feature = "audio")]
-                        InterthreadMessage::AudioChangePreferredKbits(kbits) => self.audio.change_preferred_kbits(kbits),
+                        InterthreadMessage::AudioChangePreferredKbits(kbits) => {
+                            self.audio.change_preferred_kbits(kbits)
+                        }
                         #[cfg(feature = "audio")]
                         InterthreadMessage::AudioChangeMuteState(muted) => self.audio.change_mute_state(muted),
                         //InterthreadMessage::AudioChangeDenoiserState(denoiser_state) => self.audio.change_denoiser_state(denoiser_state),
                         #[cfg(feature = "audio")]
-                        InterthreadMessage::AudioChangeDenoiserState(denoiser_state) => self.ui_s.log_error("Denoiser is currently disabled"),
+                        InterthreadMessage::AudioChangeDenoiserState(denoiser_state) => {
+                            self.ui_s.log_error("Denoiser is currently disabled")
+                        }
                         InterthreadMessage::Quit() => {
-                            match self.rendezvous_socket.shutdown(Shutdown::Both) {
-                                _ => {}
+                            if let Some(rendezvous) = self.peers.rendezvous_servers_mut().next().as_mut() {
+                                if let Some(tcp_conn) = rendezvous.tcp_conn.as_mut() {
+                                    if let Err(err) = tcp_conn.shutdown(Shutdown::Both) {
+                                        self.ui_s.log_error(&format!(
+                                            "Error while trying to shutdown TCP rendezvous server socket: {}",
+                                            err.to_string()
+                                        ));
+                                    }
+                                }
                             }
                             *running = false;
                             return;
                         }
-                        _ => unreachable!()
+                        _ => unreachable!(),
                     }
                 }
                 Err(mpsc::TryRecvError::Disconnected) => break,
-                Err(mpsc::TryRecvError::Empty) => break
+                Err(mpsc::TryRecvError::Empty) => break,
             }
         }
     }
@@ -262,8 +323,16 @@ impl ConnectionManager {
                         match token {
                             WAKER => break,
                             RENDEZVOUS => {
-                                let mut msg_type = [0;1];
-                                match self.rendezvous_socket.read(&mut msg_type) {
+                                let mut msg_type = [0; 1];
+                                let rendezvous_socket = self
+                                    .peers
+                                    .rendezvous_servers_mut()
+                                    .next()
+                                    .expect("No rendezvous server found")
+                                    .tcp_conn
+                                    .as_mut()
+                                    .expect("Rendezvous server has no TCP connection");
+                                match rendezvous_socket.read(&mut msg_type) {
                                     Ok(0) => {
                                         self.ui_s.log_warning("Disconnected from rendezvous server");
                                         break;
@@ -275,22 +344,32 @@ impl ConnectionManager {
                                         // Socket is not ready anymore, stop reading
                                         break;
                                     }
-                                    Err(e) if e.kind() == ErrorKind::ConnectionReset || e.kind() == ErrorKind::NotConnected || e.kind() == ErrorKind::ConnectionRefused => {
+                                    Err(e)
+                                        if e.kind() == ErrorKind::ConnectionReset
+                                            || e.kind() == ErrorKind::NotConnected
+                                            || e.kind() == ErrorKind::ConnectionRefused =>
+                                    {
                                         match e.kind() {
-                                            ErrorKind::ConnectionReset => 
-                                            self.ui_s.log_warning(&format!("Disconnected from rendezvous server, reconnecting in {}", RECONNECT_DELAY.as_secs())),
-                                            ErrorKind::NotConnected | ErrorKind::ConnectionRefused => 
-                                            self.ui_s.log_warning(&format!("Reconnecting failed to rendezvous server, retrying in {}", RECONNECT_DELAY.as_secs())),
-                                            _ => unreachable!()
+                                            ErrorKind::ConnectionReset => self.ui_s.log_warning(&format!(
+                                                "Disconnected from rendezvous server, reconnecting in {}",
+                                                RECONNECT_DELAY.as_secs()
+                                            )),
+                                            ErrorKind::NotConnected | ErrorKind::ConnectionRefused => {
+                                                self.ui_s.log_warning(&format!(
+                                                    "Reconnecting failed to rendezvous server, retrying in {}",
+                                                    RECONNECT_DELAY.as_secs()
+                                                ))
+                                            }
+                                            _ => unreachable!(),
                                         }
-                                        
-                                        self.poll.registry().deregister(&mut self.rendezvous_socket).unwrap();
+
+                                        self.poll.registry().deregister(rendezvous_socket).unwrap();
                                         self.try_server_reconnect();
                                         break;
-                                    },
+                                    }
                                     e => panic!("err={:?}", e), // Unexpected error
                                 }
-                            },
+                            }
                             UDP_SOCKET => {
                                 let mut buf = [0; 65536];
                                 match self.udp_socket.recv_from(&mut buf) {
@@ -307,7 +386,7 @@ impl ConnectionManager {
                                     }
                                     e => println!("err={:?}", e), // Unexpected error
                                 }
-                            },
+                            }
                             MULTICAST_SOCKET => {
                                 let mut buf = [0; 65536];
                                 match self.multicast_socket.recv_from(&mut buf) {
@@ -325,7 +404,7 @@ impl ConnectionManager {
                                     e => println!("err={:?}", e), // Unexpected error
                                 }
                             }
-                            _ => unreachable!()
+                            _ => unreachable!(),
                         }
                     }
                 }
@@ -336,7 +415,13 @@ impl ConnectionManager {
     fn check_new_chunks(&mut self) {
         if let Some(chunks) = self.file_manager.get_requested_chunks() {
             for (peer, chunks) in chunks {
-                if let Err(e) = self.send_udp_message(Some(peer), MsgType::RequestFileChunks, &msg_types::RequestFileChunks {chunks,}, true, false) {
+                if let Err(e) = self.send_udp_message(
+                    Some(peer),
+                    MsgType::RequestFileChunks,
+                    &msg_types::RequestFileChunks { chunks },
+                    true,
+                    false,
+                ) {
                     self.ui_s.log_error(&format!("Error while trying to send a file chunk request: {}", e.to_string()))
                 }
             }
@@ -352,7 +437,7 @@ impl ConnectionManager {
                     conn_stats.push((p.clone(), c.statistics.clone()));
                 }
             }
-            
+
             self.ui_s.send(InterthreadMessage::ConnectionStatistics(conn_stats)).unwrap();
             self.ui_s.send(InterthreadMessage::TransferStatistics(transfer_stats)).unwrap();
             self.last_stats_update = Instant::now();
@@ -368,11 +453,15 @@ impl ConnectionManager {
             }
             durations.push(conn.next_keep_alive());
         }
-        let next_stats_update = (self.last_stats_update + STATS_UPDATE_DELAY).checked_duration_since(self.last_stats_update).unwrap_or(Duration::from_secs(0));
-        let next_broadcast = (self.last_broadcast + BROADCAST_DELAY).checked_duration_since(self.last_broadcast).unwrap_or(Duration::from_secs(0));
+        let next_stats_update = (self.last_stats_update + STATS_UPDATE_DELAY)
+            .checked_duration_since(self.last_stats_update)
+            .unwrap_or(Duration::from_secs(0));
+        let next_broadcast = (self.last_broadcast + BROADCAST_DELAY)
+            .checked_duration_since(self.last_broadcast)
+            .unwrap_or(Duration::from_secs(0));
         durations.push(next_stats_update);
         durations.push(next_broadcast);
-        durations.sort_by(|a,b| a.cmp(b));
+        durations.sort_by(|a, b| a.cmp(b));
     }
 
     fn try_server_reconnect(&mut self) {

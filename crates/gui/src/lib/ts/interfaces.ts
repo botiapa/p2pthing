@@ -23,8 +23,8 @@ export class UIPeer implements IPeer {
 	call_status: CallStatus = CallStatus.None;
 	messages: ChatMessageUI[] = [];
 
-	constructor(p: IPeer) {
-		this.public_key = new NetworkedPublicKey(p.public_key);
+	constructor(public_key: INetworkedPublicKey) {
+		this.public_key = new NetworkedPublicKey(public_key);
 	}
 
 	equals(other: UIPeer): boolean {

@@ -23,7 +23,7 @@
                         img.attachment(src="{file.absolute_path}")
                         p Bytes read {$data.transfer_statistics[file.file_id]?.bytes_read}
                         p Bytes written {$data.transfer_statistics[file.file_id]?.bytes_written}
-                        p Started {$data.transfer_statistics[file.file_id]?.started}
+                        p Started {$data.transfer_statistics[file.file_id]?.started.toString()}
                         +else
                             progress(value="{$data.transfer_statistics[file.file_id].bytes_written/file.total_length}")
                     

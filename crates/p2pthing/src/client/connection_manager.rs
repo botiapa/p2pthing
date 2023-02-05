@@ -1,15 +1,34 @@
-use p2pthing_common::mio_misc::{NotificationId, channel::channel, queue::NotificationQueue, self};
-use mio::{Interest, Poll, Waker, net::{TcpStream, UdpSocket}};
-use p2pthing_common::{encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption}, message_type::{InterthreadMessage, MsgType, UdpPacket, msg_types::Call}};
-use socket2::{Socket, Protocol, Type, Domain, SockAddr};
-use std::{collections::HashMap, net::{SocketAddr, Ipv4Addr}, rc::Rc, str::FromStr, sync::{Arc}, thread::{self, JoinHandle}, time::{Duration, Instant}};
+use enumset::EnumSet;
+use mio::{
+    net::{TcpStream, UdpSocket},
+    Interest, Poll, Waker,
+};
 use p2pthing_common::mio_misc::channel::Sender;
+use p2pthing_common::mio_misc::{self, channel::channel, queue::NotificationQueue, NotificationId};
+use p2pthing_common::{
+    encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption},
+    message_type::{msg_types::Call, InterthreadMessage, MsgType, UdpPacket},
+};
+use socket2::{Domain, Protocol, SockAddr, Socket, Type};
+use std::{
+    collections::HashMap,
+    net::{Ipv4Addr, SocketAddr},
+    rc::Rc,
+    str::FromStr,
+    sync::Arc,
+    thread::{self, JoinHandle},
+    time::{Duration, Instant},
+};
 
 use mio::Token;
 
-use super::{file_manager::FileManager, udp_connection::{UdpConnection, UdpConnectionState}, peer::{Peer, PeerList}};
 #[cfg(feature = "audio")]
 use super::audio::Audio;
+use super::{
+    file_manager::FileManager,
+    peer::{Peer, PeerList, PeerSource, PeerType},
+    udp_connection::{UdpConnection, UdpConnectionState},
+};
 
 mod event_loop;
 mod tcp_messages;
@@ -22,13 +41,13 @@ const UDP_SOCKET: Token = Token(2);
 const MULTICAST_SOCKET: Token = Token(3);
 
 /// Call decay defined in seconds
-const CALL_DECAY: Duration = Duration::from_secs(10); 
+const CALL_DECAY: Duration = Duration::from_secs(10);
 /// Keep alive delay between messages
-pub const KEEP_ALIVE_DELAY: Duration = Duration::from_secs(10); 
+pub const KEEP_ALIVE_DELAY: Duration = Duration::from_secs(10);
 /// Message sending interval when mid-call
-pub const KEEP_ALIVE_DELAY_MIDCALL: Duration = Duration::from_secs(1); 
+pub const KEEP_ALIVE_DELAY_MIDCALL: Duration = Duration::from_secs(1);
 /// Message sending interval when announcing
-pub const ANNOUNCE_DELAY: Duration = Duration::from_secs(1); 
+pub const ANNOUNCE_DELAY: Duration = Duration::from_secs(1);
 /// Delay between rendezvous server reconnect tries
 const RECONNECT_DELAY: Duration = Duration::from_secs(5);
 /// Delay between retrying to send a reliable message
@@ -47,7 +66,6 @@ pub const MULTICAST_ADDRESS: &str = "225.1.1.1:42070";
 const MULTICAST_MAGIC: u32 = 0xdeadbeef;
 
 pub struct ConnectionManager {
-    rendezvous_socket: TcpStream,
     rendezvous_ip: SocketAddr,
     rendezvous_public_key: Option<NetworkedPublicKey>,
     udp_socket: Rc<UdpSocket>,
@@ -67,7 +85,7 @@ pub struct ConnectionManager {
     last_broadcast: Instant,
     next_custom_id: u32,
     /// Messages waiting for confirmation. The U32 is the packet_id, while the String is the id of the message.
-    msg_confirmations: HashMap<u32, String>
+    msg_confirmations: HashMap<u32, String>,
 }
 
 #[derive(Debug)]
@@ -80,10 +98,10 @@ pub struct UdpHolder {
     pub address: SocketAddr,
     pub msg_type: MsgType,
     /// Custom identifier used when trying to identify a confirmed message
-    pub custom_id: Option<u32>
+    pub custom_id: Option<u32>,
 }
 
-impl UdpHolder{
+impl UdpHolder {
     pub fn resend(&mut self) {
         let packet_data = &bincode::serialize(&self.packet).unwrap()[..];
         self.sock.send_to(packet_data, self.address).unwrap();
@@ -92,7 +110,13 @@ impl UdpHolder{
 }
 
 impl ConnectionManager {
-    pub fn new(encryption:AsymmetricEncryption, rend_ip: String, poll: Poll, ui_s: Sender<InterthreadMessage>, cm_s: Sender<InterthreadMessage>) -> ConnectionManager {
+    pub fn new(
+        encryption: AsymmetricEncryption,
+        rend_ip: String,
+        poll: Poll,
+        ui_s: Sender<InterthreadMessage>,
+        cm_s: Sender<InterthreadMessage>,
+    ) -> ConnectionManager {
         let rend_ip = SocketAddr::from_str(&rend_ip).unwrap();
 
         let mut rendezvous_socket = TcpStream::connect(rend_ip).unwrap();
@@ -100,13 +124,14 @@ impl ConnectionManager {
 
         let mut udp_socket = UdpSocket::bind(SocketAddr::from_str("0.0.0.0:0").unwrap()).unwrap();
         poll.registry().register(&mut udp_socket, UDP_SOCKET, Interest::READABLE).unwrap();
-        let mut udp_connections = Vec::new();
 
-        let mut multicast_socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP)).unwrap();
-        multicast_socket.set_reuse_address(true);
-        multicast_socket.set_nonblocking(true);
+        let multicast_socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP)).unwrap();
+        multicast_socket.set_reuse_address(true).expect("Failed setting multicast socket to reuse_address");
+        multicast_socket.set_nonblocking(true).expect("Failed setting multicast socket to nonblocking");
         multicast_socket.bind(&SockAddr::from(SocketAddr::from_str(MULTICAST_BIND_ADDRESS).unwrap())).unwrap();
-        multicast_socket.join_multicast_v4(&Ipv4Addr::from_str(MULTICAST_IP).unwrap(), &Ipv4Addr::UNSPECIFIED);
+        multicast_socket
+            .join_multicast_v4(&Ipv4Addr::from_str(MULTICAST_IP).unwrap(), &Ipv4Addr::UNSPECIFIED)
+            .expect("Multicast ipv4 group join failed");
         let multicast_socket = std::net::UdpSocket::from(multicast_socket);
         let mut multicast_socket = UdpSocket::from_std(multicast_socket);
         poll.registry().register(&mut multicast_socket, MULTICAST_SOCKET, Interest::READABLE).unwrap();
@@ -117,22 +142,33 @@ impl ConnectionManager {
 
         let udp_socket = Rc::new(udp_socket);
         let encryption = Rc::new(encryption);
-        // Add the rendezvous server as an UDP connection
-        udp_connections.push(UdpConnection::new(
-            UdpConnectionState::Unannounced, 
-            rend_ip, 
-            udp_socket.clone(), 
+
+        let mut peers = PeerList::default();
+
+        // Add the rendezvous server as a peer
+        let rendezvous_udp = UdpConnection::new(
+            UdpConnectionState::Unannounced,
+            rend_ip,
+            udp_socket.clone(),
             Some(SymmetricEncryption::new()),
-            encryption.clone()
-        ));
+            encryption.clone(),
+        );
+        peers.push(Peer {
+            addr: Some(rend_ip),
+            tcp_conn: Some(rendezvous_socket),
+            udp_conn: Some(rendezvous_udp),
+            sym_key: None,
+            public_key: None,
+            source: EnumSet::only(PeerSource::Manual),
+            peer_type: PeerType::RendezvousServer,
+        });
 
         ConnectionManager {
-            rendezvous_socket,
             rendezvous_ip: rend_ip,
             rendezvous_public_key: None,
             udp_socket: udp_socket.clone(),
             multicast_socket,
-            peers: PeerList::default(),
+            peers,
             poll,
             cm_s: cm_s.clone(),
             ui_s,
@@ -148,7 +184,10 @@ impl ConnectionManager {
         }
     }
 
-    pub fn start(rend_ip: String, ui_s: Sender<InterthreadMessage>) -> (mio_misc::channel::Sender<InterthreadMessage>, JoinHandle<()>, NetworkedPublicKey) {
+    pub fn start(
+        rend_ip: String,
+        ui_s: Sender<InterthreadMessage>,
+    ) -> (mio_misc::channel::Sender<InterthreadMessage>, JoinHandle<()>, NetworkedPublicKey) {
         let poll = Poll::new().unwrap();
         let waker = Arc::new(Waker::new(poll.registry(), WAKER).unwrap());
         let queue = Arc::new(NotificationQueue::new(waker.clone()));
@@ -162,7 +201,7 @@ impl ConnectionManager {
             let mut mgr = ConnectionManager::new(encryption, rend_ip, poll, ui_s, cm_s1);
             mgr.event_loop(&mut cm_r);
         });
-        
+
         (cm_s, thr, key)
     }
 

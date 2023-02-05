@@ -3,13 +3,14 @@ use std::net::SocketAddr;
 use mio::Token;
 use p2pthing_common::{encryption::{SymmetricEncryption, NetworkedPublicKey}, message_type::{InterthreadMessage, MsgType, msg_types::{self, AnnounceRequest, AnnounceSecret, Call, CallResponse, Disconnect}}, read_exact, ui::UIConn, num};
 
-use crate::client::peer::{Peer, PeerSource};
+use crate::client::peer::{Peer, PeerType, PeerSource};
 
 use super::{ConnectionManager, UdpConnection, UdpConnectionState};
 
 impl ConnectionManager {
     pub fn read_tcp_message(&mut self, msg_type: u8, _: Token) {
-        let sock = &mut self.rendezvous_socket;
+        let sock = self.peers.rendezvous_servers_mut().next().expect("Rendezvous server not found").tcp_conn.as_mut().expect("Rendezvous server does not have TCP connection associated with it");
+        
         let addr = sock.peer_addr().unwrap();
 
         let msg_type = num::FromPrimitive::from_u8(msg_type);
@@ -46,6 +47,7 @@ impl ConnectionManager {
         
     }
 
+    /// The rendezvous server has asked us to announce ourselves
     fn on_announce_request(&mut self, addr: SocketAddr, announcement: AnnounceRequest) {
         let conn = self.peers.conn(&addr).unwrap();
 
@@ -67,14 +69,16 @@ impl ConnectionManager {
             if self.peers.peer(&new_p).is_none() {
                 self.peers.push(Peer {
                     addr: None,
-                    public_key: new_p,
-                    source: PeerSource::Rendezvous.into(),
-                    sym_key: None,
+                    tcp_conn: None,
                     udp_conn: None,
+                    sym_key: None,
+                    public_key: Some(new_p),
+                    source: PeerSource::Rendezvous.into(),
+                    peer_type: PeerType::ClientPeer,
                 });
             }
         }
-        self.ui_s.send(InterthreadMessage::AnnounceResponse(self.peers.inner.iter().map(|p| p.public_key.clone()).collect::<Vec<NetworkedPublicKey>>().clone())).unwrap();
+        self.ui_s.send(InterthreadMessage::AnnounceResponse(self.peers.inner.iter().filter(|p| p.peer_type == PeerType::ClientPeer).map(|p| p.public_key.as_ref().unwrap().clone()).collect::<Vec<NetworkedPublicKey>>().clone())).unwrap();
     }
 
     /// Handle incoming call
@@ -119,7 +123,7 @@ impl ConnectionManager {
                 conn.send_udp_message_with_public_key(MsgType::AnnounceSecret, &AnnounceSecret{secret: conn.symmetric_key.as_ref().unwrap().secret.clone()}, true, None).unwrap();
     
                 p.udp_conn = Some(conn);
-                self.ui_s.send(InterthreadMessage::CallAccepted(p.public_key.clone())).unwrap();
+                self.ui_s.send(InterthreadMessage::CallAccepted(p.public_key.as_ref().unwrap().clone())).unwrap();
             }
             else {
                 self.ui_s.log_warning(
@@ -130,7 +134,7 @@ impl ConnectionManager {
 
     fn on_disconnect(&mut self, _: SocketAddr, disconnect_peer: Disconnect) {
         let p = self.peers.peer_mut(&disconnect_peer.public_key).unwrap();
-        self.ui_s.log_info(&format!("Peer ({}) disconnected", p.public_key));
+        self.ui_s.log_info(&format!("Peer ({}) disconnected", p.public_key.as_ref().unwrap()));
         self.peers.remove(&disconnect_peer.public_key);
         self.ui_s.send(InterthreadMessage::PeerDisconnected(disconnect_peer.public_key)).unwrap();
     }

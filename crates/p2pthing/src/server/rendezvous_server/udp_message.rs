@@ -18,7 +18,7 @@ impl RendezvousServer {
                 match self.peers.iter_mut().find(|p| p.public_key == announce.public_key) {
                     Some(p) => {
                         p.udp_addr = Some(addr);
-                        println!("Associated UDP adress ({}) with peer: ({})", addr, p.public_key);
+                        println!("Associated UDP address ({}) with peer: ({})", addr, p.public_key);
                         self.send_udp_message(addr, MsgType::Announce, &());
                     },
                     None => {}

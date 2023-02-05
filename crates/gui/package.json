@@ -1,27 +1,27 @@
 {
-  "name": "p2pthing_gui",
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "serve": "vite preview",
-    "check": "svelte-check --tsconfig ./tsconfig.json"
-  },
-  "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^1.0.0-next.11",
-    "@tauri-apps/cli": "^1.0.0-beta.9",
-    "@tsconfig/svelte": "^2.0.1",
-    "svelte": "^3.37.0",
-    "svelte-check": "^2.1.0",
-    "svelte-preprocess": "^4.7.2",
-    "tslib": "^2.2.0",
-    "typescript": "^4.3.2",
-    "vite": "^2.4.4"
-  },
-  "dependencies": {
-    "@tauri-apps/api": "^1.0.0-beta.6",
-    "pug": "^3.0.2",
-    "sass": "^1.38.1"
-  }
+	"name": "p2pthing_gui",
+	"version": "0.0.0",
+	"type": "module",
+	"scripts": {
+		"dev": "vite",
+		"build": "vite build",
+		"serve": "vite preview",
+		"check": "svelte-check --tsconfig ./tsconfig.json"
+	},
+	"devDependencies": {
+		"@sveltejs/vite-plugin-svelte": "^2.0.2",
+		"@tauri-apps/cli": "^1.2.3",
+		"@tsconfig/svelte": "^3.0.0",
+		"svelte": "^3.55.1",
+		"svelte-check": "^3.0.3",
+		"svelte-preprocess": "^5.0.1",
+		"tslib": "^2.5.0",
+		"typescript": "^4.9.4",
+		"vite": "^4.0.4"
+	},
+	"dependencies": {
+		"@tauri-apps/api": "^1.2.0",
+		"pug": "^3.0.2",
+		"sass": "^1.57.1"
+	}
 }

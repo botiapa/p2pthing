@@ -11,6 +11,7 @@
 	import { data } from "./lib/ts/stores";
 	import { invoke } from "@tauri-apps/api/tauri";
 	import { unlisten_all } from "./lib/ts/helpers";
+	import { resourceDir } from "@tauri-apps/api/path";
 
 	let sidebar;
 	let dropping: boolean = false;
@@ -23,9 +24,9 @@
 			if (new_data) data.set(new_data);
 		});
 
-		const unl2 = listen("tauri://file-drop-hover", (e) => {
+		const unl2 = listen("tauri://file-drop-hover", async (e) => {
 			const validPaths = e.payload as string[];
-			if (validPaths.length > 0) {
+			if (validPaths.length > 0 && $data.selected_peer) {
 				dropping = true;
 			}
 		});

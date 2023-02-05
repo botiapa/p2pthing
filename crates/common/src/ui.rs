@@ -12,21 +12,22 @@ pub trait UI {
     fn main_loop(&mut self, cm_s: Sender<InterthreadMessage>, own_public_key: NetworkedPublicKey);
 }
 
+#[derive(PartialEq)]
 pub enum UIType {
     TUI,
-    GUI
+    GUI,
 }
 
 pub enum CallStatus {
     PunchThroughSuccessfull,
     PunchThroughInProgress,
     SentRequest,
-    RequestFailed
+    RequestFailed,
 }
 
 pub struct CallStatusHolder {
     pub status: CallStatus,
-    pub public_key: NetworkedPublicKey
+    pub public_key: NetworkedPublicKey,
 }
 
 /// Helper trait for logging messages

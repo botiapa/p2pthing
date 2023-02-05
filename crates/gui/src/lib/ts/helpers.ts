@@ -27,8 +27,7 @@ export async function convert_attachment_file_name(
 	fileName: string,
 	ext: string
 ): Promise<string> {
-	let curr_dir = await path.currentDir();
-	let full_path = curr_dir + relative_folder + fileName + "." + ext;
+	let full_path = "./" + relative_folder + fileName + "." + ext;
 	console.log(full_path);
 	return Promise.resolve(convertFileSrc(full_path));
 }

@@ -56,6 +56,7 @@ impl RendezvousServer {
         self.sym_keys.insert(addr, secret);
     }
 
+    /// Receive the public key announcement of the peer, now encrypted symmetrically
     fn on_announce(&mut self, addr: SocketAddr, announcement: AnnouncePublic) {
         let p = ServerPeer {
             addr: Some(addr),
@@ -76,6 +77,7 @@ impl RendezvousServer {
         self.peers.push(p); 
     }
 
+    /// A peer is trying to call another peer
     fn on_call(&mut self, addr: SocketAddr, call: &mut Call) {
         if let Some(caller) = self.peers.iter().find(|x| x.addr.unwrap() == addr) {
             if let Some(callee) = self.peers.iter().find(|x| x.public_key == call.callee) {
@@ -112,6 +114,7 @@ impl RendezvousServer {
         }
     }
 
+    /// A peer has responded to a call
     fn on_call_response(&mut self, _: SocketAddr, call_response: CallResponse) {
         let callee = call_response.call.callee;
         let caller = call_response.call.caller.unwrap();

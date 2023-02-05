@@ -52,9 +52,9 @@ async function on_debug_message(data: GuiData, debug_data: any) {
 }
 
 async function on_announce_response(data: GuiData, peers: any[]) {
-	for (const p of peers) {
-		if (!data.p(p.public_key)) {
-			data.peers.push(new UIPeer(p));
+	for (const public_key of peers) {
+		if (!data.p(public_key)) {
+			data.peers.push(new UIPeer(public_key));
 		}
 	}
 	return data;
@@ -98,7 +98,6 @@ async function on_chat_message(data: GuiData, msg: ChatMessage) {
 		NetworkedPublicKey.equals(msg.recipient, data.own_public_key)
 	);
 	await new_msg.generate_absolute_paths();
-	console.log("yoo:", new_msg.attachments[0].absolute_path);
 	p.messages.push(new_msg);
 
 	return data;

@@ -1,8 +1,19 @@
 use std::net::SocketAddr;
 
-use p2pthing_common::{encryption::SymmetricEncryption, message_type::{InterthreadMessage, MsgType, UdpPacket, msg_types::{self, AnnounceSecret, AnnouncePublic}}, ui::UIConn, num};
+use p2pthing_common::{
+    encryption::SymmetricEncryption,
+    message_type::{
+        msg_types::{self, AnnouncePublic, AnnounceSecret},
+        InterthreadMessage, MsgType, UdpPacket,
+    },
+    num,
+    ui::UIConn,
+};
 
-use crate::client::{udp_connection::{UdpConnectionState, UdpConnection}, peer::{PeerSource, Peer}};
+use crate::client::{
+    peer::{Peer, PeerSource, PeerType},
+    udp_connection::{UdpConnection, UdpConnectionState},
+};
 
 use super::{ConnectionManager, MULTICAST_MAGIC};
 
@@ -11,7 +22,10 @@ impl ConnectionManager {
         let conn = match self.peers.conn_mut(&addr) {
             Some(c) => c,
             None => {
-                self.ui_s.log_warning(&format!("Tried reading from ({}), but couldn't find the associated connection", addr));
+                self.ui_s.log_warning(&format!(
+                    "Tried reading from ({}), but couldn't find the associated connection",
+                    addr
+                ));
                 return;
             }
         };
@@ -20,7 +34,8 @@ impl ConnectionManager {
 
         let udp_packet: UdpPacket = bincode::deserialize(&buf).unwrap();
         conn.statistics.received_bytes(bincode::serialized_size(&udp_packet).unwrap());
-        if conn.received_messages.contains(&udp_packet.msg_id) { // If already received this message
+        if conn.received_messages.contains(&udp_packet.msg_id) {
+            // If already received this message
             return;
         }
         conn.received_messages.push(udp_packet.msg_id);
@@ -28,10 +43,10 @@ impl ConnectionManager {
         if udp_packet.reliable {
             conn.send_confirmation(udp_packet.msg_id);
         }
-        
+
         let buf = match conn.decrypt(udp_packet) {
             Ok(buf) => buf,
-            Err(_) => return
+            Err(_) => return,
         };
 
         let msg_type = buf[0];
@@ -63,7 +78,7 @@ impl ConnectionManager {
             Some(MsgType::FileChunks) => {
                 self.on_file_chunks(addr, &buf[1..]);
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 
@@ -75,23 +90,31 @@ impl ConnectionManager {
             let announce: AnnouncePublic = bincode::deserialize(&buf[4..]).unwrap();
             // If the peer is not this peer
             if announce.public_key != self.encryption.get_public_key() {
-                let conn = UdpConnection::new(UdpConnectionState::Unknown, addr, self.udp_socket.clone(), None, self.encryption.clone());
+                let conn = UdpConnection::new(
+                    UdpConnectionState::Unknown,
+                    addr,
+                    self.udp_socket.clone(),
+                    None,
+                    self.encryption.clone(),
+                );
                 if let Some(p) = self.peers.peer_mut(&announce.public_key) {
-                    p.udp_conn = Some(conn);
+                    if p.udp_conn.is_none() {
+                        p.udp_conn = Some(conn);
+                    }
                     p.source = p.source | PeerSource::Multicast;
-                }
-                else {
+                } else {
                     self.peers.push(Peer {
                         addr: None,
+                        tcp_conn: None,
                         udp_conn: Some(conn),
-                        public_key: announce.public_key.clone(),
                         sym_key: None,
+                        public_key: Some(announce.public_key.clone()),
                         source: PeerSource::Multicast.into(),
+                        peer_type: PeerType::ClientPeer,
                     });
                 }
                 self.ui_s.log_info(&format!("Received multicast announce message: {:?}", announce.public_key))
             }
-            
         }
     }
 
@@ -113,7 +136,7 @@ impl ConnectionManager {
         let secret = &secret.secret[..];
 
         let conn = self.peers.conn_mut(&addr).unwrap();
-        
+
         conn.symmetric_key = Some(SymmetricEncryption::new_from_secret(secret));
         conn.upgraded = true;
 
@@ -125,32 +148,36 @@ impl ConnectionManager {
         let id: u32 = bincode::deserialize(data).unwrap();
         let conn = self.peers.conn_mut(&addr).unwrap();
 
-        let removed = conn.sent_messages.iter_mut().position(|msg| msg.packet.msg_id == id).map(|i| conn.sent_messages.remove(i));
+        let removed =
+            conn.sent_messages.iter_mut().position(|msg| msg.packet.msg_id == id).map(|i| conn.sent_messages.remove(i));
         match removed {
             Some(packet) => {
                 conn.statistics.new_ping(packet.sent.elapsed());
                 match packet.msg_type {
                     MsgType::AnnounceSecret => {
                         conn.upgraded = true;
-                        self.ui_s.log_info(&format!("Peer received secret: ({})", conn.associated_peer.as_ref().unwrap()));
+                        self.ui_s
+                            .log_info(&format!("Peer received secret: ({})", conn.associated_peer.as_ref().unwrap()));
                         self.check_punchthrough(addr);
                     }
                     MsgType::ChatMessage => {
                         let id = self.msg_confirmations.remove(&packet.custom_id.unwrap()).unwrap();
-                        self.ui_s.log_info(&format!("Chat message confirmed by: ({})", conn.associated_peer.as_ref().unwrap()));
+                        self.ui_s.log_info(&format!(
+                            "Chat message confirmed by: ({})",
+                            conn.associated_peer.as_ref().unwrap()
+                        ));
                         self.ui_s.send(InterthreadMessage::OnChatMessageReceived(id)).unwrap();
                     }
                     MsgType::RequestFileChunks => {}
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 }
             }
-            None => self.ui_s.log_warning(&format!("Couldn't find message with confirmation id: ({})", id))
+            None => self.ui_s.log_warning(&format!("Couldn't find message with confirmation id: ({})", id)),
         }
     }
 
     fn on_udp_announce(&mut self, addr: SocketAddr) {
-        self.peers.conn_mut(&addr).unwrap()
-        .state = UdpConnectionState::Connected;
+        self.peers.conn_mut(&addr).unwrap().state = UdpConnectionState::Connected;
         self.ui_s.log_info("UDP Announcement has been accepted");
     }
 
@@ -163,11 +190,13 @@ impl ConnectionManager {
         let msg: msg_types::ChatMessage = bincode::deserialize(data).unwrap();
         let p = self.peers.peer_by_addr(&addr).unwrap();
         self.ui_s.send(InterthreadMessage::OnChatMessage(msg.clone())).unwrap();
-        
+
         //TODO: Ability to accept or deny file download
         if let Some(files) = msg.attachments {
             for file in files {
-                if let Err(e) = self.file_manager.start_receiving_file(file.clone(), p.public_key.clone()) {
+                if let Err(e) =
+                    self.file_manager.start_receiving_file(file.clone(), p.public_key.as_ref().unwrap().clone())
+                {
                     self.ui_s.log_error(&format!("Failed preparing to receive file: {}", e));
                 }
             }
@@ -179,21 +208,27 @@ impl ConnectionManager {
         let data: Vec<u8> = bincode::deserialize(data).unwrap();
         let p = self.peers.peer_by_addr(&addr).unwrap();
 
-        self.audio.decode_and_queue_packet(&data[..], p.public_key.clone());
+        self.audio.decode_and_queue_packet(&data[..], p.public_key.as_ref().unwrap().clone());
     }
 
     fn on_request_file_chunks(&mut self, addr: SocketAddr, data: &[u8]) {
         let data: msg_types::RequestFileChunks = bincode::deserialize(data).unwrap();
         let p = self.peers.peer_by_addr(&addr).unwrap();
-        let public_key = p.public_key.clone();
+        let public_key = p.public_key.as_ref().unwrap().clone();
 
         //TODO: Ability to accept or deny file download
         match self.file_manager.get_file_chunks(data) {
             Ok(chunks) => {
-                if let Err(e) = self.send_udp_message(Some(public_key), MsgType::FileChunks, &msg_types::FileChunks {chunks,}, false, false) {
+                if let Err(e) = self.send_udp_message(
+                    Some(public_key),
+                    MsgType::FileChunks,
+                    &msg_types::FileChunks { chunks },
+                    false,
+                    false,
+                ) {
                     self.ui_s.log_error(&format!("Error while trying to send a file chunk request: {}", e.to_string()));
                 }
-            },
+            }
             Err(e) => self.ui_s.log_error(&format!("Failed reading file chunks: {}", &e)),
         }
     }
@@ -203,8 +238,7 @@ impl ConnectionManager {
 
         //TODO: Ability to accept or deny file download
         if let Err(e) = self.file_manager.store_file_chunks(data) {
-            self.ui_s.log_error(&format!("Error while trying to save a file chunk: {}", e)); 
+            self.ui_s.log_error(&format!("Error while trying to save a file chunk: {}", e));
         }
     }
-    
 }

@@ -1,6 +1,6 @@
 {
 	"package": {
-		"productName": "tauri-test",
+		"productName": "p2pthing",
 		"version": "0.1.0"
 	},
 	"build": {
@@ -29,13 +29,11 @@
 			"shortDescription": "",
 			"longDescription": "",
 			"deb": {
-				"depends": [],
-				"useBootstrapper": false
+				"depends": []
 			},
 			"macOS": {
 				"frameworks": [],
 				"minimumSystemVersion": "",
-				"useBootstrapper": false,
 				"exceptionDomain": "",
 				"signingIdentity": null,
 				"entitlements": null
@@ -50,10 +48,12 @@
 			"active": false
 		},
 		"allowlist": {
-			"all": true,
-			"fs_old": {
-				"readBinaryFile": true,
-				"readTextFile": true
+			"fs": {
+				"readFile": true,
+				"writeFile": true
+			},
+			"path": {
+				"all": true
 			}
 		},
 		"windows": [
