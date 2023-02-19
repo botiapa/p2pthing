@@ -9,6 +9,7 @@ use p2pthing_common::{
     num,
     ui::UIConn,
 };
+use tracing::instrument;
 
 use crate::client::{
     peer::{Peer, PeerSource, PeerType},
@@ -18,6 +19,7 @@ use crate::client::{
 use super::{ConnectionManager, MULTICAST_MAGIC};
 
 impl ConnectionManager {
+    #[instrument(skip(self, buf))]
     pub fn read_udp_message(&mut self, _: usize, addr: SocketAddr, buf: &[u8]) {
         let conn = match self.peers.conn_mut(&addr) {
             Some(c) => c,

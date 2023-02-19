@@ -197,15 +197,17 @@ impl ConnectionManager {
         let key = encryption.get_public_key();
 
         let cm_s1 = cm_s.clone();
-        let thr = thread::spawn(move || {
-            let mut mgr = ConnectionManager::new(encryption, rend_ip, poll, ui_s, cm_s1);
-            mgr.event_loop(&mut cm_r);
-        });
-
+        let thr = thread::Builder::new()
+            .name("ConnectionManager".to_string())
+            .spawn(move || {
+                let mut mgr = ConnectionManager::new(encryption, rend_ip, poll, ui_s, cm_s1);
+                mgr.event_loop(&mut cm_r);
+            })
+            .unwrap();
         (cm_s, thr, key)
     }
 
     pub fn quit(s: &Sender<InterthreadMessage>) {
-        s.send(InterthreadMessage::Quit()).unwrap();
+        s.send(InterthreadMessage::Quit()).ok(); //ignore result
     }
 }

@@ -18,6 +18,7 @@ use p2pthing_common::{
     },
     ui::UIConn,
 };
+use tracing::{instrument, trace_span};
 
 use crate::client::udp_connection::UdpConnectionState;
 
@@ -28,50 +29,57 @@ use super::{
 };
 
 impl ConnectionManager {
+    #[instrument(skip(self, r), name = "client event loop")]
     pub fn event_loop(&mut self, r: &mut Receiver<InterthreadMessage>) {
         let mut running = true;
         while running {
-            let mut events = Events::with_capacity(1024);
+            trace_span!("client event loop iteration").in_scope(|| {
+                let mut events = Events::with_capacity(1024);
 
-            #[cfg(feature = "audio")]
-            if !self.audio.started && self.peers.connections().any(|c| c.upgraded && c.associated_peer.is_some()) {
-                self.audio.init();
-            }
+                #[cfg(feature = "audio")]
+                if !self.audio.started && self.peers.connections().any(|c| c.upgraded && c.associated_peer.is_some()) {
+                    self.audio.init();
+                }
 
-            // Calculate the next timeout
-            let mut durations = vec![];
-            self.get_next_timeouts(&mut durations);
+                // Calculate the next timeout
+                let mut durations = vec![];
+                self.get_next_timeouts(&mut durations);
 
-            self.poll.poll(&mut events, durations.first().cloned()).unwrap();
+                trace_span!("polling for events", next_poll_duration = durations.first().cloned().unwrap().as_millis())
+                    .in_scope(|| {
+                        self.poll.poll(&mut events, durations.first().cloned()).unwrap();
+                    });
 
-            // Remove old call requests
-            self.calls_in_progress.retain(|(_, time)| {
-                return time.elapsed() < CALL_DECAY;
+                // Remove old call requests
+                self.calls_in_progress.retain(|(_, time)| {
+                    return time.elapsed() < CALL_DECAY;
+                });
+
+                // Send keep alive messages
+                self.send_keep_alive_messages();
+
+                // Send broadcast messages
+                self.send_multicast_messages();
+
+                // Send reliable messages
+                self.send_reliable_messages();
+
+                // Handle interthread messages
+                self.handle_interthread_messages(r, &mut running);
+
+                // Handle IO events
+                self.handle_io_events(&events);
+
+                // Check for new requestable chunks
+                self.check_new_chunks();
+
+                // Send UI updates
+                self.send_ui_updates();
             });
-
-            // Send keep alive messages
-            self.send_keep_alive_messages();
-
-            // Send broadcast messages
-            self.send_multicast_messages();
-
-            // Send reliable messages
-            self.send_reliable_messages();
-
-            // Handle interthread messages
-            self.handle_interthread_messages(r, &mut running);
-
-            // Handle IO events
-            self.handle_io_events(&events);
-
-            // Check for new requestable chunks
-            self.check_new_chunks();
-
-            // Send UI updates
-            self.send_ui_updates();
         }
     }
 
+    #[instrument(skip(self))]
     fn send_keep_alive_messages(&mut self) {
         for conn in &mut self.peers.connections_mut() {
             match conn.state {
@@ -83,25 +91,40 @@ impl ConnectionManager {
                     };
                     match conn.last_message_sent {
                         Some(time) if time.elapsed() < delay => {}
-                        None | _ => {
-                            match conn.associated_peer.clone() {
-                                Some(public_key) => {
-                                    conn.send_raw_message(MsgType::KeepAlive, &(), false, None); //TODO: Error handling
+                        None | _ => match conn.associated_peer.clone() {
+                            Some(public_key) => {
+                                if let Err(err) = conn.send_raw_message(MsgType::KeepAlive, &(), false, None) {
+                                    self.ui_s.log_error(&format!(
+                                        "Failed to send keep alive message to ({}) with error: {}",
+                                        public_key, err
+                                    ));
+                                } else {
                                     self.ui_s.log_info(&format!("Sent keep alive message to ({})", public_key));
                                 }
-                                None => {
-                                    conn.send_raw_message(MsgType::KeepAlive, &(), false, None); //TODO: Error handling
+                            }
+                            None => {
+                                if let Err(err) = conn.send_raw_message(MsgType::KeepAlive, &(), false, None) {
+                                    self.ui_s.log_error(&format!(
+                                        "Failed to send keep alive message to the rendezvous server with error: {}",
+                                        err
+                                    ));
+                                } else {
                                     self.ui_s.log_info("Sent keep alive message to the rendezvous server");
                                 }
                             }
-                        }
+                        },
                     }
                 }
                 UdpConnectionState::Unannounced => match conn.last_announce {
                     Some(time) if time.elapsed() < ANNOUNCE_DELAY => {}
                     None | _ => {
                         let announce = msg_types::AnnouncePublic { public_key: self.encryption.get_public_key() };
-                        conn.send_raw_message(MsgType::Announce, &announce, false, None);
+                        if let Err(err) = conn.send_raw_message(MsgType::Announce, &announce, false, None) {
+                            self.ui_s.log_error(&format!(
+                                "Failed to send announce message to the rendezvous server with error: {}",
+                                err
+                            ));
+                        }
                         conn.last_announce = Some(Instant::now());
                     }
                 },
@@ -110,6 +133,7 @@ impl ConnectionManager {
         }
     }
 
+    #[instrument(skip(self))]
     fn send_multicast_messages(&mut self) {
         if self.last_broadcast.elapsed() > BROADCAST_DELAY {
             let announce = AnnouncePublic { public_key: self.encryption.get_public_key().clone() };
@@ -123,6 +147,7 @@ impl ConnectionManager {
         }
     }
 
+    #[instrument(skip(self))]
     fn send_reliable_messages(&mut self) {
         for conn in &mut self.peers.connections_mut() {
             match conn.state {
@@ -134,8 +159,11 @@ impl ConnectionManager {
         }
     }
 
+    #[instrument(skip(self, r, running))]
     fn handle_interthread_messages(&mut self, r: &mut Receiver<InterthreadMessage>, running: &mut bool) {
         loop {
+            let s = trace_span!("Interthread message iteration");
+            let _enter = s.enter();
             match r.try_recv() {
                 Ok(msg) => {
                     match msg {
@@ -315,6 +343,7 @@ impl ConnectionManager {
         }
     }
 
+    #[instrument(skip(self, events))]
     fn handle_io_events(&mut self, events: &Events) {
         for event in events.iter() {
             match event.token() {
@@ -412,6 +441,7 @@ impl ConnectionManager {
         }
     }
 
+    #[instrument(skip(self))]
     fn check_new_chunks(&mut self) {
         if let Some(chunks) = self.file_manager.get_requested_chunks() {
             for (peer, chunks) in chunks {
@@ -428,6 +458,7 @@ impl ConnectionManager {
         }
     }
 
+    #[instrument(skip(self))]
     fn send_ui_updates(&mut self) {
         if self.last_stats_update.elapsed() > STATS_UPDATE_DELAY {
             let transfer_stats = self.file_manager.transfer_statistics.clone();
@@ -445,13 +476,16 @@ impl ConnectionManager {
     }
 
     /// Lists the next timeouts, and also sorts the list, so the first one is always the smallest
+    #[instrument(skip(self, durations))]
     fn get_next_timeouts(&mut self, durations: &mut Vec<Duration>) {
         for conn in &mut self.peers.connections_mut() {
             match conn.next_resendable() {
                 Some(d) => durations.push(d),
                 None => {}
             }
-            durations.push(conn.next_keep_alive());
+            if let Some(next_keep_alive) = conn.next_keep_alive() {
+                durations.push(next_keep_alive);
+            }
         }
         let next_stats_update = (self.last_stats_update + STATS_UPDATE_DELAY)
             .checked_duration_since(self.last_stats_update)
@@ -464,6 +498,7 @@ impl ConnectionManager {
         durations.sort_by(|a, b| a.cmp(b));
     }
 
+    #[instrument(skip(self))]
     fn try_server_reconnect(&mut self) {
         let cm_s = self.cm_s.clone();
         thread::spawn(move || {

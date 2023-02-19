@@ -1,1 +1,2 @@
-wt cargo run --release --features server s ; split-pane -d ./crates/gui yarn run serve ; split-pane cargo run --release --features server,gui g ; split-pane -cargo run --release --features server,gui g
+#Start-Process wt 'cargo run --release --features server,gui s ; split-pane -V cargo run --release --features server,gui g ; move-focus left ; split-pane -H cargo run --release --features server,gui g ; move-focus right ; split-pane -H -d ./crates/gui'
+Start-Process wt '-d ./ ; split-pane -d ./ -V ; move-focus left ; split-pane -d ./ -H ; move-focus right ; split-pane -H -d ./crates/gui'

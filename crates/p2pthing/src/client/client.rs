@@ -30,7 +30,6 @@ pub fn start_client(ip: String, ui_type: UIType) {
     ui.main_loop(cm_s.clone(), own_public_key);
 
     // If the ui interface exited, then signal the connection manager to stop as well
-
     ConnectionManager::quit(&cm_s);
 
     cm_thr.join().unwrap();

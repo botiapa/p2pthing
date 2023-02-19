@@ -3,10 +3,12 @@ use std::io::{self, Write};
 use p2pthing_common::num;
 use p2pthing_common::serde::Serialize;
 use p2pthing_common::{encryption::NetworkedPublicKey, message_type::MsgType, ui::UIConn};
+use tracing::instrument;
 
 use super::ConnectionManager;
 
 impl ConnectionManager {
+    #[instrument(skip(self, msg), fields(msg_type = ?t))]
     pub fn send_tcp_message<T: ?Sized>(&mut self, t: MsgType, msg: &T) -> io::Result<()>
     where
         T: Serialize,
@@ -33,6 +35,7 @@ impl ConnectionManager {
         Ok(())
     }
 
+    #[instrument(skip(self, msg), fields(msg_type = ?t))]
     pub fn send_tcp_message_public_key<T: ?Sized>(&mut self, t: MsgType, msg: &T) -> io::Result<()>
     where
         T: Serialize,
@@ -59,6 +62,7 @@ impl ConnectionManager {
     }
 
     /// Send a UDP packet which optionally can be reliable
+    #[instrument(skip(self, msg), fields(msg_type = ?t))]
     pub fn send_udp_message<T: ?Sized>(
         &mut self,
         public_key: Option<NetworkedPublicKey>,

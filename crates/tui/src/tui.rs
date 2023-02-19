@@ -1,12 +1,35 @@
-use std::{io::stdout, panic, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}, mpsc::Receiver}};
+use std::{
+    io::stdout,
+    panic,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::Receiver,
+        Arc, Mutex,
+    },
+};
 
-use crossterm::{ErrorKind, QueueableCommand, event::{DisableMouseCapture, EnableMouseCapture, Event}, execute, terminal::{EnterAlternateScreen, LeaveAlternateScreen, enable_raw_mode}};
+use crossterm::{
+    event::{DisableMouseCapture, EnableMouseCapture, Event},
+    execute,
+    terminal::{enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    ErrorKind, QueueableCommand,
+};
 use mio::{Events, Poll, Token, Waker};
-use mio_misc::{NotificationId, channel::{Sender, channel}, queue::NotificationQueue};
+use mio_misc::{
+    channel::{channel, Sender},
+    queue::NotificationQueue,
+    NotificationId,
+};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
-use p2pthing_common::{debug_message::DebugMessage, encryption::NetworkedPublicKey, message_type::InterthreadMessage, statistics::ConnectionStatistics, ui::{CallStatusHolder, UI, UIConn}};
-use tui::{Terminal, backend::CrosstermBackend, widgets::ListState};
+use p2pthing_common::{
+    debug_message::DebugMessage,
+    encryption::NetworkedPublicKey,
+    message_type::InterthreadMessage,
+    statistics::ConnectionStatistics,
+    ui::{CallStatusHolder, UI},
+};
+use tui::{backend::CrosstermBackend, widgets::ListState, Terminal};
 
 use crate::{popup::Popup, ui_peer::UIPeer};
 
@@ -18,7 +41,7 @@ pub(crate) enum ActiveBlock {
     Tabs,
     InputList,
     OutputList,
-    BitRateList
+    BitRateList,
 }
 
 #[derive(FromPrimitive)]
@@ -61,7 +84,7 @@ pub struct Tui {
     pub(crate) active_popup: Option<Box<dyn Popup>>,
     pub(crate) conn_stats: Vec<(NetworkedPublicKey, ConnectionStatistics)>,
     /// Whether the debug panel is visible above the chat messages
-    pub(crate) debug_visible: bool
+    pub(crate) debug_visible: bool,
 }
 
 impl Tui {
@@ -104,13 +127,13 @@ impl Tui {
             calls: vec![],
             active_popup: None,
             conn_stats: vec![],
-            debug_visible: false
+            debug_visible: false,
         }
     }
 }
 
 impl UI for Tui {
-    fn get_notifier(&self) -> Sender<InterthreadMessage>{
+    fn get_notifier(&self) -> Sender<InterthreadMessage> {
         self.ui_s.clone()
     }
 
@@ -124,8 +147,9 @@ impl UI for Tui {
         ctrlc::set_handler(move || {
             r.store(false, Ordering::SeqCst);
             println!("Set ctrl+c handler");
-        }).unwrap();
- 
+        })
+        .unwrap();
+
         let s1 = Arc::new(Mutex::new(self.ui_s.clone()));
         let err = Arc::new(Mutex::new(String::from("")));
         {
@@ -139,16 +163,15 @@ impl UI for Tui {
                 s1.send(InterthreadMessage::WakeUp).unwrap();
             }));
         }
-        
 
         enable_raw_mode().unwrap();
         let mut stdout = stdout();
         execute!(stdout, EnterAlternateScreen, EnableMouseCapture).unwrap();
-        
+
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend).unwrap();
         terminal.clear().unwrap();
-        
+
         self.receive_keyboard_mouse_events();
 
         let mut events = Events::with_capacity(1);
@@ -165,50 +188,50 @@ impl UI for Tui {
             self.handle_keyboard_mouse_events();
 
             // Render the final image
-            terminal.draw(|f| {
-                let screen = f.size();
+            terminal
+                .draw(|f| {
+                    let screen = f.size();
 
-                let tab_divider = self.tab_divider(screen);
-                let tab_layout = self.tab_layout(tab_divider[0]);
-                self.tabs(f, tab_layout[0]);
-                self.status_icons(f, tab_layout[1]);
-                
-                match FromPrimitive::from_usize(self.selected_tab) {
-                    Some(TabIndex::MAIN) => {
-                        let main_layout = self.main_layout(tab_divider[1]);
-                        self.contact_list(f, main_layout[0]);
+                    let tab_divider = self.tab_divider(screen);
+                    let tab_layout = self.tab_layout(tab_divider[0]);
+                    self.tabs(f, tab_layout[0]);
+                    self.status_icons(f, tab_layout[1]);
 
-                        match self.contact_list_state.selected() {
-                            Some(_) => {
-                                let main_screen = self.main_screen(main_layout[1]);
-                                self.peer_stats(f, main_screen[0]);
-                                self.chat_messages(f, main_screen[1]);
-                                self.chat_input(f, main_screen[2]);
+                    match FromPrimitive::from_usize(self.selected_tab) {
+                        Some(TabIndex::MAIN) => {
+                            let main_layout = self.main_layout(tab_divider[1]);
+                            self.contact_list(f, main_layout[0]);
+
+                            match self.contact_list_state.selected() {
+                                Some(_) => {
+                                    let main_screen = self.main_screen(main_layout[1]);
+                                    self.peer_stats(f, main_screen[0]);
+                                    self.chat_messages(f, main_screen[1]);
+                                    self.chat_input(f, main_screen[2]);
+                                }
+                                None => {} // TODO: Display a friendly message here?
                             }
-                            None => {} // TODO: Display a friendly message here?
                         }
-                        
+                        Some(TabIndex::SETTINGS) => {
+                            let settings_layout = self.settings_layout(tab_divider[1]);
+                            let audio_options_layout = self.setting_audio_options(settings_layout[0]);
+                            self.settings_input_list(f, audio_options_layout[0]);
+                            self.settings_output_list(f, audio_options_layout[1]);
+                            self.settings_kbits_list(f, audio_options_layout[2]);
+                        }
+                        Some(TabIndex::DEBUG) => {
+                            self.debug_messages(f, tab_divider[1]);
+                        }
+                        _ => unimplemented!("Unimplemented tab received"),
                     }
-                    Some(TabIndex::SETTINGS) => {
-                        let settings_layout = self.settings_layout(tab_divider[1]);
-                        let audio_options_layout = self.setting_audio_options(settings_layout[0]);
-                        self.settings_input_list(f, audio_options_layout[0]);
-                        self.settings_output_list(f, audio_options_layout[1]);
-                        self.settings_kbits_list(f, audio_options_layout[2]);
-
+                    match &mut self.active_popup {
+                        Some(popup) => {
+                            popup.draw(f, screen);
+                        }
+                        None => {}
                     }
-                    Some(TabIndex::DEBUG) => {
-                        self.debug_messages(f, tab_divider[1]);
-                    }
-                    _ => unimplemented!("Unimplemented tab received")
-                }
-                match &mut self.active_popup {
-                    Some(popup) => {
-                        popup.draw(f, screen);
-                    }
-                    None => {}
-                }
-            }).unwrap();
+                })
+                .unwrap();
         }
         terminal.backend_mut().queue(LeaveAlternateScreen).unwrap().queue(DisableMouseCapture).unwrap();
         terminal.clear().unwrap();

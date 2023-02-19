@@ -16,6 +16,7 @@ server = []
 tui = ["p2pthing_tui"]
 gui = ["p2pthing_gui"]
 audio = ["cpal", "magnum-opus", "rubato", "ringbuf"]
+tracing = ["p2pthing_common/tracing"]
 #win = ["dxgcap"]
 
 gui-build = [ "p2pthing_gui/custom-protocol" ]
@@ -38,6 +39,7 @@ enumset = { version = "1.0.11", features = ["serde"] }
 
 ### COMMON
 p2pthing_common = { path = "../common" }
+tracing = { version = "0.1.37" } # FIXME: Have to import it again, since the instrument macro does not seem to work with the one in common
 
 ### TUI
 p2pthing_tui = { path = "../tui", optional = true }
