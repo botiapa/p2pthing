@@ -54,3 +54,4 @@ no_llvm_build
 db
 Cargo.lock
 downloads/**
+tracing/**
