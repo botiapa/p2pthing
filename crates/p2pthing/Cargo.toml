@@ -15,7 +15,7 @@ default = ["server"]
 server = []
 tui = ["p2pthing_tui"]
 gui = ["p2pthing_gui"]
-audio = ["cpal", "magnum-opus", "rubato", "ringbuf"]
+#audio = ["cpal", "magnum-opus", "rubato", "ringbuf"]
 tracing = ["p2pthing_common/tracing"]
 #win = ["dxgcap"]
 
@@ -27,13 +27,13 @@ stopwatch = "0.0.7"
 spin_sleep = "1.0.0"
 #scrap = "0.5"
 bincode = "1.3.1"
-mio = {version = "0.7.7", features = ["tcp", "udp", "os-poll"]}
-base64 = "0.13.0"
+mio = {version = "0.8.8"}
+base64 = "0.21.3"
 chrono = "0.4.19"
 crossbeam = "0.8.0"
-itertools = "0.10.0"
+itertools = "0.11.0"
 memmap = "0.7.0"
-socket2 = "0.4.4"
+socket2 = "0.5.3"
 serde = {version = "1.0.123", features = ["derive"]}
 enumset = { version = "1.0.11", features = ["serde"] }
 
@@ -49,8 +49,8 @@ p2pthing_gui = { path = "../gui/src-tauri", optional = true }
 
 ### AUDIO
 
-cpal = { version =  "0.13.1", optional = true }
-magnum-opus  = { version = "0.3.2", optional = true }
-rubato = { version = "0.8.1", optional = true}
-ringbuf = {version = "0.2.3", optional = true }
+#cpal = { version =  "0.15.2", optional = true }
+#magnum-opus  = { version = "0.3.2", optional = true }
+#rubato = { version = "0.8.1", optional = true}
+#ringbuf = {version = "0.2.3", optional = true }
 #nnnoiseless = {version = "0.3.2", optional = true}

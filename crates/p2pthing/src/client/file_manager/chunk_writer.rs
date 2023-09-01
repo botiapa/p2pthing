@@ -1,10 +1,15 @@
-use std::{collections::HashSet, fmt, fs::File, io::{self, Write}};
+use std::{
+    collections::HashSet,
+    fmt,
+    fs::File,
+    io::{self, Write},
+};
 
 use memmap::MmapMut;
 
 pub(crate) enum Error {
     IOError(io::Error),
-    InvalidChunkError
+    InvalidChunkError,
 }
 
 impl fmt::Display for Error {
@@ -21,7 +26,7 @@ pub(crate) struct ChunkWriter {
     written_chunks: Vec<usize>,
     mmap: MmapMut,
     chunk_size: usize,
-    chunk_count: usize
+    chunk_count: usize,
 }
 
 /// This struct is similar to BufWriter as it uses buffering to optimize writing to disk,
@@ -32,16 +37,10 @@ pub(crate) struct ChunkWriter {
 impl ChunkWriter {
     pub fn new(inner: File, chunk_size: usize, chunk_count: usize) -> ChunkWriter {
         let mmap = unsafe { MmapMut::map_mut(&inner).unwrap() };
-        ChunkWriter {
-            inner,
-            written_chunks: Vec::new(),
-            mmap,
-            chunk_size,
-            chunk_count
-        }
+        ChunkWriter { inner, written_chunks: Vec::new(), mmap, chunk_size, chunk_count }
     }
 
-    pub fn write_chunk(&mut self, chunk_id: usize, data: &[u8]) -> Result<(), Error> {  
+    pub fn write_chunk(&mut self, chunk_id: usize, data: &[u8]) -> Result<(), Error> {
         if self.written_chunks.contains(&chunk_id) {
             return Err(Error::InvalidChunkError);
         }

@@ -1,30 +1,35 @@
 use std::{collections::HashMap, env, net::SocketAddr, str::FromStr};
 //use scrap;
-use mio::{Interest, Poll, Token, net::UdpSocket};
 use mio::net::{TcpListener, TcpStream};
-use p2pthing_common::encryption::{AsymmetricEncryption, SymmetricEncryption, NetworkedPublicKey};
-use p2pthing_common::message_type::{MsgType, msg_types};
+use mio::{net::UdpSocket, Interest, Poll, Token};
+use p2pthing_common::encryption::{AsymmetricEncryption, NetworkedPublicKey, SymmetricEncryption};
+use p2pthing_common::message_type::{msg_types, MsgType};
 
 mod event_loop;
-mod utils;
 mod tcp_message;
 mod udp_message;
+mod utils;
 
 struct CallRequest {
     caller: ServerPeer,
-    callee: ServerPeer
+    callee: ServerPeer,
 }
 
 struct ServerPeer {
     pub public_key: NetworkedPublicKey,
     pub addr: Option<SocketAddr>,
     pub udp_addr: Option<SocketAddr>,
-    pub sym_key: Option<SymmetricEncryption>
+    pub sym_key: Option<SymmetricEncryption>,
 }
 
 impl Clone for ServerPeer {
     fn clone(&self) -> Self {
-        Self { public_key: self.public_key.clone(), addr: self.addr.clone(), udp_addr: self.udp_addr.clone(), sym_key: None }
+        Self {
+            public_key: self.public_key.clone(),
+            addr: self.addr.clone(),
+            udp_addr: self.udp_addr.clone(),
+            sym_key: None,
+        }
     }
 }
 
@@ -42,17 +47,17 @@ pub struct RendezvousServer {
     /// List of ongoing calls
     calls: Vec<CallRequest>,
     encryption: AsymmetricEncryption,
-    next_msg_id: u32
+    next_msg_id: u32,
 }
 
 impl RendezvousServer {
-    pub fn start_server(){
+    pub fn start_server() {
         let poll = Poll::new().unwrap();
         let mut next_token = 0;
 
         let port = match env::vars().find(|(k, _)| k == "PORT") {
             Some((_, v)) => v.parse::<i32>().unwrap(),
-            None => 42069
+            None => 42069,
         };
         println!("Starting server with PORT: {}", port);
 
@@ -61,13 +66,13 @@ impl RendezvousServer {
         let mut tcp_listener = TcpListener::bind(SocketAddr::from_str(ip).unwrap()).unwrap();
         poll.registry().register(&mut tcp_listener, Token(next_token), Interest::READABLE).unwrap();
         next_token += 1;
-        
+
         let mut udp_listener = UdpSocket::bind(SocketAddr::from_str(ip).unwrap()).unwrap();
         poll.registry().register(&mut udp_listener, Token(next_token), Interest::READABLE).unwrap();
         next_token += 1;
-        
+
         let encryption = AsymmetricEncryption::new();
-        
+
         let mut s = RendezvousServer {
             poll,
             next_token,
@@ -94,14 +99,17 @@ impl RendezvousServer {
             Some(peer) => {
                 let p_key = peer.public_key.clone();
                 for c in self.tcp_connections.values_mut() {
-                    if c.peer_addr().unwrap() != sock // Only broadcast to other clients
+                    if c.peer_addr().unwrap() != sock
+                    // Only broadcast to other clients
                     {
-                        RendezvousServer::send_tcp_message(c, MsgType::Disconnect, &msg_types::Disconnect{public_key: p_key.clone()});
+                        RendezvousServer::send_tcp_message(
+                            c,
+                            MsgType::Disconnect,
+                            &msg_types::Disconnect { public_key: p_key.clone() },
+                        );
                     }
                 }
-                self.peers.iter()
-                .position(|p| p.addr.unwrap() == addr)
-                .map(|i| self.peers.remove(i));
+                self.peers.iter().position(|p| p.addr.unwrap() == addr).map(|i| self.peers.remove(i));
             }
             None => {} // The peer wasn't announced
         }
@@ -109,15 +117,13 @@ impl RendezvousServer {
         self.addresses.remove(&addr);
         self.tcp_connections.remove(&token);
     }
-    
-    
 }
 
 /*
 fn start_recording() {
     let mut dxgi = DXGIManager::new(100).unwrap();
     dxgi.set_capture_source_index(0);
-    
+
     let (w,h) = dxgi.geometry();
     println!("Dimensions: ({}:{})", w, h);
 
@@ -139,20 +145,20 @@ fn start_recording() {
         .stdout(Stdio::piped())
         .spawn()
         .expect("failed to execute child");
-    
+
     let (tx, rx) = mpsc::channel();
     let mut child_stdin = child.stdin.take().unwrap();
     let mut child_stdout = child.stdout.take().unwrap();
-    
+
     thread::spawn(move || {
         let mut buf = vec![];
 
         let mut loop_helper = LoopHelper::builder()
-        .report_interval_s(0.5) 
+        .report_interval_s(0.5)
         .build_with_target_rate(60.0);
 
         loop {
-                
+
             loop_helper.loop_start();
             let res = rx.try_recv();
             match res {
@@ -168,9 +174,9 @@ fn start_recording() {
     thread::spawn(move || {
         let mut buf = vec![0;2560*1080*3];
         for i in 0..1000 {
-            
+
             child_stdout.read_exact(&mut buf).unwrap();
-        
+
             //image::save_buffer(format!("test{i}.png", i=i), &buf, 2560, 1080, image::ColorType::Rgb8).unwrap();
         }
     });
@@ -179,7 +185,7 @@ fn start_recording() {
         let (buf, (_,_)) = dxgi.capture_frame_components().unwrap();
         tx.send(buf).unwrap();
     }
-    
+
     /*child_stdin.flush().unwrap();
     child.wait().expect("child process wasn't running");*/
 

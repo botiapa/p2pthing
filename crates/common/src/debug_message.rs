@@ -1,17 +1,17 @@
-use std::fmt::Display;
 use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum DebugMessageType {
-    Info=0,
-    Warning=1,
-    Error=2,
+    Info = 0,
+    Warning = 1,
+    Error = 2,
 }
 pub struct DebugMessage {
     pub message: String,
     pub time: DateTime<Utc>,
-    pub msg_type: DebugMessageType
+    pub msg_type: DebugMessageType,
 }
 
 impl Display for DebugMessage {

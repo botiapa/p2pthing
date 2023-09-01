@@ -21,12 +21,7 @@ pub struct TransferStatistics {
 
 impl TransferStatistics {
     pub fn new() -> Self {
-        Self {
-            started: SystemTime::now(),
-            bytes_written: 0,
-            bytes_read: 0,
-            state: TransferState::Transfering,
-        }
+        Self { started: SystemTime::now(), bytes_written: 0, bytes_read: 0, state: TransferState::Transfering }
     }
 }
 

@@ -1,6 +1,9 @@
 use std::net::SocketAddr;
 
-use p2pthing_common::{message_type::{MsgType, UdpPacket, msg_types}, num};
+use p2pthing_common::{
+    message_type::{msg_types, MsgType, UdpPacket},
+    num,
+};
 
 use super::RendezvousServer;
 
@@ -20,12 +23,12 @@ impl RendezvousServer {
                         p.udp_addr = Some(addr);
                         println!("Associated UDP address ({}) with peer: ({})", addr, p.public_key);
                         self.send_udp_message(addr, MsgType::Announce, &());
-                    },
+                    }
                     None => {}
                 }
             }
             Some(MsgType::KeepAlive) => {}
-            _ => unreachable!()
+            _ => unreachable!(),
         }
     }
 }

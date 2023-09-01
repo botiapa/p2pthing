@@ -1,8 +1,15 @@
-use std::{net::SocketAddr, ops::{DerefMut, Deref}, slice::Iter};
+use std::{
+    net::SocketAddr,
+    ops::{Deref, DerefMut},
+    slice::Iter,
+};
 
 use mio::net::TcpStream;
-use p2pthing_common::{encryption::{NetworkedPublicKey, SymmetricEncryption}, enumset::{EnumSetType, EnumSet}};
-use serde::{Serialize, Deserialize};
+use p2pthing_common::{
+    encryption::{NetworkedPublicKey, SymmetricEncryption},
+    enumset::{EnumSet, EnumSetType},
+};
+use serde::{Deserialize, Serialize};
 
 use super::udp_connection::UdpConnection;
 
@@ -16,11 +23,10 @@ pub enum PeerSource {
     Manual,
 }
 
-
 #[derive(EnumSetType, Serialize, Deserialize, Debug)]
 pub enum PeerType {
     RendezvousServer,
-    ClientPeer
+    ClientPeer,
 }
 
 #[derive(Debug)]
@@ -47,10 +53,9 @@ impl PartialEq for Peer {
     }
 }
 
-
 #[derive(Debug)]
 pub struct PeerList {
-    pub inner: Vec<Peer>
+    pub inner: Vec<Peer>,
 }
 
 /*impl Deref for PeerList {
@@ -64,7 +69,7 @@ pub struct PeerList {
 impl DerefMut for PeerList {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.inner
-    } 
+    }
 }*/
 
 impl Default for PeerList {
@@ -75,7 +80,7 @@ impl Default for PeerList {
 
 impl PeerList {
     /// Adds the given peer to the list
-    pub fn push(&mut self, p: Peer){
+    pub fn push(&mut self, p: Peer) {
         if self.inner.iter().any(|_p| *_p == p) {
             // We should never enter this if
             panic!("Tried to push a peer that is already present");
@@ -85,9 +90,10 @@ impl PeerList {
 
     /// Removes a peer by the given public key
     pub fn remove(&mut self, public_key: &NetworkedPublicKey) {
-        self.inner.iter_mut()
-        .position(|p| p.public_key.is_some() && &p.public_key.as_ref().unwrap() == &public_key)
-        .map(|i| self.inner.swap_remove(i));
+        self.inner
+            .iter_mut()
+            .position(|p| p.public_key.is_some() && &p.public_key.as_ref().unwrap() == &public_key)
+            .map(|i| self.inner.swap_remove(i));
     }
 
     /// Searches for a peer by the given public key
@@ -104,7 +110,7 @@ impl PeerList {
     pub fn peer_by_addr(&self, addr: &SocketAddr) -> Option<&Peer> {
         self.inner.iter().filter(|p| p.udp_conn.is_some()).find(|p| &p.udp_conn.as_ref().unwrap().address == addr)
     }
-    
+
     /// Searches for a peer by the given udp socket address, returns it as mutable
     pub fn peer_by_addr_mut(&mut self, addr: &SocketAddr) -> Option<&mut Peer> {
         self.inner.iter_mut().filter(|p| p.udp_conn.is_some()).find(|p| &p.udp_conn.as_ref().unwrap().address == addr)
@@ -121,21 +127,21 @@ impl PeerList {
     }
 
     /// Returns all peer connections
-    pub fn connections(&self) -> impl Iterator<Item=&UdpConnection>{
+    pub fn connections(&self) -> impl Iterator<Item = &UdpConnection> {
         self.inner.iter().filter_map(|p| p.udp_conn.as_ref())
     }
 
     /// Returns all peer connections as mutable
-    pub fn connections_mut(&mut self) -> impl Iterator<Item=&mut UdpConnection>{
+    pub fn connections_mut(&mut self) -> impl Iterator<Item = &mut UdpConnection> {
         self.inner.iter_mut().filter_map(|p| p.udp_conn.as_mut())
     }
 
     /// Returns all rendezvous servers
-    pub fn rendezvous_servers(&self) -> impl Iterator<Item=&Peer>{
+    pub fn rendezvous_servers(&self) -> impl Iterator<Item = &Peer> {
         self.inner.iter().filter(|p| p.peer_type == PeerType::RendezvousServer)
     }
 
-    pub fn rendezvous_servers_mut(&mut self) -> impl Iterator<Item=&mut Peer>{
+    pub fn rendezvous_servers_mut(&mut self) -> impl Iterator<Item = &mut Peer> {
         self.inner.iter_mut().filter(|p| p.peer_type == PeerType::RendezvousServer)
     }
 }

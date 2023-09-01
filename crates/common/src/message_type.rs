@@ -1,6 +1,6 @@
-use std::{collections::HashMap, fmt::Display};
 use num_derive::{FromPrimitive, ToPrimitive};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, fmt::Display};
 
 use crate::statistics::{ConnectionStatistics, TransferStatistics};
 
@@ -62,26 +62,26 @@ pub enum InterthreadMessage {
 
 #[derive(Debug, ToPrimitive, FromPrimitive)]
 pub enum MsgType {
-    Announce=0,
-    AnnounceSecret=8,
-    Call=1,
-    CallResponse=2,
-    Disconnect=3,
-    KeepAlive=4,
-    ChatMessage=5,
-    ChatMessageReceived=6,
-    AnnounceRequest=7,
-    MessageConfirmation=9,
-    OpusPacket=10,
-    RequestFileChunks=11,
-    FileChunks=12
+    Announce = 0,
+    AnnounceSecret = 8,
+    Call = 1,
+    CallResponse = 2,
+    Disconnect = 3,
+    KeepAlive = 4,
+    ChatMessage = 5,
+    ChatMessageReceived = 6,
+    AnnounceRequest = 7,
+    MessageConfirmation = 9,
+    OpusPacket = 10,
+    RequestFileChunks = 11,
+    FileChunks = 12,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum MsgEncryption {
     Unencrypted,
     PublicKey,
-    SymmetricKey
+    SymmetricKey,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -89,7 +89,7 @@ pub struct UdpPacket {
     pub data: Vec<u8>,
     pub reliable: bool,
     pub msg_id: u32,
-    pub upgraded: MsgEncryption
+    pub upgraded: MsgEncryption,
 }
 
 pub type FileId = String;
@@ -106,8 +106,8 @@ pub struct PreparedFile {
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct FileChunk {
-    pub file_id: FileId, 
-    pub index: usize
+    pub file_id: FileId,
+    pub index: usize,
 }
 
 impl Display for FileChunk {
@@ -118,27 +118,26 @@ impl Display for FileChunk {
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct FileDataChunk {
-    pub file_id: FileId, 
+    pub file_id: FileId,
     pub index: usize,
-    pub data: Vec<u8>
+    pub data: Vec<u8>,
 }
 
 pub mod msg_types {
     use std::net::SocketAddr;
 
-    use chrono::{DateTime, Utc};
-    use serde::{Serialize, Deserialize};
     use crate::encryption::NetworkedPublicKey;
+    use chrono::{DateTime, Utc};
+    use serde::{Deserialize, Serialize};
 
     use super::{FileChunk, FileDataChunk, PreparedFile};
-    
+
     /// The server announced itself to the client, requesting an announcement.
     #[derive(Serialize, Deserialize)]
     pub struct AnnounceRequest {
-        pub public_key: NetworkedPublicKey
+        pub public_key: NetworkedPublicKey,
     }
 
-    
     #[derive(Serialize, Deserialize)]
     pub struct AnnouncePublic {
         pub public_key: NetworkedPublicKey,
@@ -146,22 +145,21 @@ pub mod msg_types {
     /// Client announces its secret to either the server, or another peer
     #[derive(Serialize, Deserialize)]
     pub struct AnnounceSecret {
-        pub secret: Vec<u8>
+        pub secret: Vec<u8>,
     }
 
-    
     #[derive(Serialize, Deserialize, Clone, PartialEq)]
     pub struct Call {
         pub callee: NetworkedPublicKey,
         pub caller: Option<NetworkedPublicKey>,
         /// This is either the callee's or caller's udp address or none, depending on who sent it, and who is the recipient
-        pub udp_address: Option<SocketAddr>
+        pub udp_address: Option<SocketAddr>,
     }
 
     #[derive(Serialize, Deserialize)]
     pub struct CallResponse {
         pub call: Call,
-        pub response: bool
+        pub response: bool,
     }
 
     #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -171,32 +169,31 @@ pub mod msg_types {
         pub recipient: NetworkedPublicKey,
         pub msg: String,
         pub attachments: Option<Vec<PreparedFile>>,
-        pub dt: DateTime<Utc>
+        pub dt: DateTime<Utc>,
     }
 
     #[derive(Serialize, Deserialize)]
     pub struct ChatMessageReceived {
-        pub index: u32
+        pub index: u32,
     }
 
     #[derive(Serialize, Deserialize)]
     pub struct Disconnect {
-        pub public_key: NetworkedPublicKey
+        pub public_key: NetworkedPublicKey,
     }
 
     #[derive(Serialize, Deserialize)]
     pub struct ReliableMessageReceived {
-        pub id: u32
+        pub id: u32,
     }
 
     #[derive(Clone, Serialize, Deserialize, Debug)]
     pub struct RequestFileChunks {
-        pub chunks: Vec<FileChunk>
+        pub chunks: Vec<FileChunk>,
     }
 
     #[derive(Clone, Serialize, Deserialize, Debug)]
     pub struct FileChunks {
-        pub chunks: Vec<FileDataChunk>
+        pub chunks: Vec<FileDataChunk>,
     }
-    
 }

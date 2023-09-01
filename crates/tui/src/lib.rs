@@ -1,6 +1,6 @@
-pub mod tui;
 mod blocks;
 mod chat_input;
 mod events;
-mod ui_peer;
 mod popup;
+pub mod tui;
+mod ui_peer;

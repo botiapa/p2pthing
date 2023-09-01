@@ -1,5 +1,7 @@
-
-use p2pthing_common::{encryption::NetworkedPublicKey, message_type::{PreparedFile, msg_types::ChatMessage}};
+use p2pthing_common::{
+    encryption::NetworkedPublicKey,
+    message_type::{msg_types::ChatMessage, PreparedFile},
+};
 
 use super::chat_input::ChatInput;
 
@@ -22,7 +24,7 @@ impl ChatMessageUI {
             id: msg.id,
             attachments: msg.attachments,
             received,
-            own
+            own,
         }
     }
 }
@@ -30,16 +32,12 @@ impl ChatMessageUI {
 pub struct UIPeer {
     inner: NetworkedPublicKey,
     pub chat_input: ChatInput,
-    pub chat_messages: Vec<ChatMessageUI>
+    pub chat_messages: Vec<ChatMessageUI>,
 }
 
 impl UIPeer {
     pub fn from(p: &NetworkedPublicKey) -> UIPeer {
-        UIPeer {
-            inner: p.clone(),
-            chat_input: ChatInput::new(),
-            chat_messages: vec![]
-        }
+        UIPeer { inner: p.clone(), chat_input: ChatInput::new(), chat_messages: vec![] }
     }
 
     pub fn get_public_key(&self) -> &NetworkedPublicKey {

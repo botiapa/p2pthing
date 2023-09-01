@@ -1,8 +1,7 @@
 use std::io::{self, Read};
 
 use mio::{Events, Interest, Token};
-use p2pthing_common::message_type::{MsgType, msg_types::AnnounceRequest};
-
+use p2pthing_common::message_type::{msg_types::AnnounceRequest, MsgType};
 
 use super::RendezvousServer;
 
@@ -20,7 +19,7 @@ impl RendezvousServer {
                         self.accept_tcp_connections();
                     }
                     UDP_LISTENER => {
-                        self.read_udp_events();   
+                        self.read_udp_events();
                     }
                     token => {
                         self.read_tcp_events(token);
@@ -40,9 +39,7 @@ impl RendezvousServer {
 
                     self.poll.registry().register(&mut sock, token, Interest::READABLE).unwrap();
 
-                    let announce_request = AnnounceRequest {
-                        public_key: self.encryption.get_public_key(),
-                    };
+                    let announce_request = AnnounceRequest { public_key: self.encryption.get_public_key() };
                     RendezvousServer::send_tcp_message(&mut sock, MsgType::AnnounceRequest, &announce_request);
 
                     self.tcp_connections.insert(token, sock);
@@ -92,7 +89,7 @@ impl RendezvousServer {
                     println!("Peer disconnected with an error={:?}", e);
                     self.on_disconnect(addr, token);
                     break;
-                },
+                }
             }
         }
     }

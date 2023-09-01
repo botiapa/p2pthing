@@ -1,15 +1,15 @@
 use core::fmt;
 use std::fmt::Display;
 
+use aes_gcm_siv::aead::{generic_array::GenericArray, Aead, NewAead};
 use aes_gcm_siv::Aes256GcmSiv; // Or `Aes128GcmSiv`
-use aes_gcm_siv::aead::{Aead, NewAead, generic_array::GenericArray};
 use num::Num;
 use rand_core::OsRng;
-use rsa::{BigUint, PaddingScheme, PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey, errors::Error};
-use serde::{Serialize, Deserialize};
+use rsa::{errors::Error, BigUint, PaddingScheme, PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
-pub struct AsymmetricEncryption{
+pub struct AsymmetricEncryption {
     public_key: RsaPublicKey,
     secret_key: RsaPrivateKey,
 }
@@ -20,17 +20,11 @@ impl AsymmetricEncryption {
         let secret_key = RsaPrivateKey::new(&mut OsRng, bits).expect("Failed to generate a key");
         let public_key = RsaPublicKey::from(&secret_key);
 
-        AsymmetricEncryption {
-            secret_key,
-            public_key,
-        }
+        AsymmetricEncryption { secret_key, public_key }
     }
 
     pub fn get_public_key(&self) -> NetworkedPublicKey {
-        NetworkedPublicKey {
-            n: self.public_key.n().to_str_radix(36),
-            e: self.public_key.e().to_str_radix(36)
-        }
+        NetworkedPublicKey { n: self.public_key.n().to_str_radix(36), e: self.public_key.e().to_str_radix(36) }
     }
 
     pub fn decrypt(&self, data: &[u8]) -> Vec<u8> {
@@ -45,7 +39,7 @@ impl AsymmetricEncryption {
 #[derive(Serialize, Debug, Deserialize, Clone, Eq, PartialEq, Hash)]
 pub struct NetworkedPublicKey {
     n: String,
-    e: String
+    e: String,
 }
 
 impl NetworkedPublicKey {
@@ -71,7 +65,7 @@ impl Display for NetworkedPublicKey {
 
 pub struct SymmetricEncryption {
     pub secret: Vec<u8>,
-    sym_key: Aes256GcmSiv
+    sym_key: Aes256GcmSiv,
 }
 
 impl fmt::Debug for SymmetricEncryption {
@@ -82,22 +76,16 @@ impl fmt::Debug for SymmetricEncryption {
 
 impl SymmetricEncryption {
     pub fn new() -> SymmetricEncryption {
-        let secret = (0..32).map(|_| { rand::random::<u8>() }).collect::<Vec<_>>();
-        let secret_arr= GenericArray::from_slice(&secret[..]);
+        let secret = (0..32).map(|_| rand::random::<u8>()).collect::<Vec<_>>();
+        let secret_arr = GenericArray::from_slice(&secret[..]);
         let sym_key = Aes256GcmSiv::new(secret_arr);
-        SymmetricEncryption {
-            secret,
-            sym_key
-        }
+        SymmetricEncryption { secret, sym_key }
     }
 
     pub fn new_from_secret(secret: &[u8]) -> SymmetricEncryption {
-        let secret_arr= GenericArray::from_slice(&secret[..]);
+        let secret_arr = GenericArray::from_slice(&secret[..]);
         let sym_key = Aes256GcmSiv::new(secret_arr);
-        SymmetricEncryption {
-            secret: secret.to_vec(),
-            sym_key
-        }
+        SymmetricEncryption { secret: secret.to_vec(), sym_key }
     }
 
     pub fn encrypt(&self, data: &[u8]) -> Vec<u8> {
@@ -110,4 +98,3 @@ impl SymmetricEncryption {
         self.sym_key.decrypt(nonce, data).unwrap()
     }
 }
-
