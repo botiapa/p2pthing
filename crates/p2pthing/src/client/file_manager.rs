@@ -63,6 +63,8 @@ enum FileType {
 
 /// Max size of a single packet in bytes
 const CHUNK_SIZE: usize = 1 * 1000;
+/// Application identifier (this is used as the folder name under the data path)
+const APPLICATION_IDENTIFIER: &str = "p2pthing";
 /// This is where the file downloads will be placed
 const DOWNLOADS_FOLDER: &str = "downloads";
 /// Request this many chunks at the same time
@@ -116,9 +118,10 @@ impl FileManager {
     pub fn start_receiving_file(&mut self, file: PreparedFile, sender: NetworkedPublicKey) -> io::Result<()> {
         let chunk_count: usize = file.total_length as usize / CHUNK_SIZE + 1;
         let original_name = PathBuf::from(file.file_name.clone());
-        let download_path = env::current_dir()
+        let download_path = dirs::data_dir()
             .unwrap()
-            .join(PathBuf::from(DOWNLOADS_FOLDER))
+            .join(APPLICATION_IDENTIFIER)
+            .join(DOWNLOADS_FOLDER)
             .join(file.file_id.clone())
             .with_extension(original_name.extension().unwrap());
         self.open_file(&file.file_id, &download_path, true, Some(file.total_length))?;
@@ -311,6 +314,7 @@ impl FileManager {
         set_file_length: Option<u64>,
     ) -> io::Result<()> {
         if !self.open_files.contains_key(file_id) {
+            fs::create_dir_all(path.clone())?;
             let file = fs::OpenOptions::new().read(true).write(true).create_new(create).open(path.clone())?;
 
             if let Some(len) = set_file_length {

@@ -1,4 +1,4 @@
-import { event, path } from "@tauri-apps/api";
+import type { event } from "@tauri-apps/api";
 
 export function unlisten_all(futureUnlisteners: Promise<event.UnlistenFn>[]) {
 	return async () => {
@@ -14,20 +14,4 @@ function extractUnlistener(futureUnlistener: Promise<event.UnlistenFn>) {
 		const unlisten = await futureUnlistener;
 		unlisten();
 	};
-}
-
-function convertFileSrc(filePath: string): string {
-	return navigator.userAgent.includes("Windows")
-		? `https://asset.localhost/${filePath}`
-		: `asset:/${filePath}`;
-}
-
-export async function convert_attachment_file_name(
-	relative_folder: string,
-	fileName: string,
-	ext: string
-): Promise<string> {
-	let full_path = "./" + relative_folder + fileName + "." + ext;
-	console.log(full_path);
-	return Promise.resolve(convertFileSrc(full_path));
 }

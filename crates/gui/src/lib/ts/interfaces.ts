@@ -1,4 +1,6 @@
-import { convert_attachment_file_name } from "./helpers";
+import { path } from "@tauri-apps/api";
+import { appDataDir } from "@tauri-apps/api/path";
+import { convertFileSrc } from "@tauri-apps/api/tauri";
 
 export class GuiData {
 	peers: UIPeer[] = [];
@@ -86,10 +88,8 @@ export class GuiFile implements IPreparedFile {
 	}
 
 	public async generate_absolute_path() {
-		this.absolute_path = await convert_attachment_file_name(
-			"downloads\\",
-			this.file_id,
-			this.file_extension
+		this.absolute_path = convertFileSrc(
+			await path.join(await appDataDir(), this.file_id + this.file_extension)
 		);
 	}
 }

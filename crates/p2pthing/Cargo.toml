@@ -36,6 +36,7 @@ memmap = "0.7.0"
 socket2 = "0.5.3"
 serde = {version = "1.0.123", features = ["derive"]}
 enumset = { version = "1.0.11", features = ["serde"] }
+dirs = "5.0.1"
 
 ### COMMON
 p2pthing_common = { path = "../common" }
