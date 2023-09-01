@@ -8,7 +8,7 @@ use p2pthing_common::{
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Color, Modifier, Style, Stylize},
     symbols::DOT,
     text::{Line, Span, Text},
     widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Tabs, Wrap},
@@ -146,13 +146,13 @@ impl Tui {
         let spans = vec![
             match self.muted {
                 // MUTED / RECORDING
-                true => Span::styled("M ", Style::default().fg(Color::Red)),
-                false => Span::styled("R ", Style::default().fg(Color::Green)),
+                true => Span::from("M ").red(),
+                false => Span::from("R ").green(),
             },
             match self.denoiser {
                 // DENOISER ON / OFF
-                true => Span::styled("D ", Style::default().fg(Color::Green)),
-                false => Span::styled("D ", Style::default().fg(Color::Red)),
+                true => Span::from("D ").green(),
+                false => Span::from("D ").red(),
             },
         ];
         let icons = Paragraph::new(Line::from(spans)).block(Block::default().borders(Borders::ALL));
@@ -169,7 +169,7 @@ impl Tui {
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(self.get_fg_color(ActiveBlock::ContactList))),
         )
-        .highlight_style(Style::default().add_modifier(Modifier::BOLD))
+        .highlight_style(Style::default().bold())
         .highlight_symbol(">");
         f.render_stateful_widget(contact_list, area, &mut self.contact_list_state);
     }
@@ -201,45 +201,30 @@ impl Tui {
             .split(area);
 
         let mut spans: Vec<Line> = vec![];
-        spans.push(Line::from(Span::from(format!("{}\n", p.get_public_key().to_string()))));
+        spans.push(Line::from(Span::from(format!("{}\n", p.get_public_key()))));
         if let Some((_, stats)) = self.conn_stats.iter().find(|(p1, _)| p1 == p.get_public_key()) {
             spans.push(Line::from(vec![
                 Span::from("Sent: "),
-                Span::styled(
-                    format!("{} bytes\n", stats.get_total_sent().to_string()),
-                    Style::default().add_modifier(Modifier::BOLD),
-                ),
+                Span::from(format!("{} bytes\n", stats.get_total_sent())).bold(),
             ]));
             spans.push(Line::from(vec![
                 Span::from("Received: "),
-                Span::styled(
-                    format!("{} bytes\n", stats.get_total_received().to_string()),
-                    Style::default().add_modifier(Modifier::BOLD),
-                ),
+                Span::from(format!("{} bytes\n", stats.get_total_received())).bold(),
             ]));
             spans.push(Line::from(vec![
                 Span::from("Sent average: "),
-                Span::styled(
-                    format!("{} bytes/s\n", stats.get_avg_sent(Duration::from_secs(5)).unwrap_or(u64::MAX).to_string()),
-                    Style::default().add_modifier(Modifier::BOLD),
-                ),
+                Span::from(format!("{} bytes/s\n", stats.get_avg_sent(Duration::from_secs(5)).unwrap_or(u64::MAX)))
+                    .bold(),
             ]));
             spans.push(Line::from(vec![
                 Span::from("Received average: "),
-                Span::styled(
-                    format!(
-                        "{} bytes/s\n",
-                        stats.get_avg_received(Duration::from_secs(5)).unwrap_or(u64::MAX).to_string()
-                    ),
-                    Style::default().add_modifier(Modifier::BOLD),
-                ),
+                Span::from(format!("{} bytes/s\n", stats.get_avg_received(Duration::from_secs(5)).unwrap_or(u64::MAX)))
+                    .bold(),
             ]));
             spans.push(Line::from(vec![
                 Span::from("Last ping: "),
-                Span::styled(
-                    format!("{} ms\n", stats.get_last_ping().unwrap_or(&Duration::from_secs(0)).as_millis()),
-                    Style::default().add_modifier(Modifier::BOLD),
-                ),
+                Span::from(format!("{} ms\n", stats.get_last_ping().unwrap_or(&Duration::from_secs(0)).as_millis()))
+                    .bold(),
             ]));
         }
         let stats_paragraph = Paragraph::new(spans).wrap(Wrap { trim: false });
@@ -255,9 +240,7 @@ impl Tui {
         for m in &p.chat_messages {
             match &last_author {
                 Some(last_author) if last_author == &m.author => {}
-                _ => chat_items.push(
-                    ListItem::new(format!("{}: \n", m.author)).style(Style::default().add_modifier(Modifier::BOLD)),
-                ),
+                _ => chat_items.push(ListItem::new(format!("{}: \n", m.author)).bold()),
             }
             last_author = Some(m.author.clone());
 
@@ -279,12 +262,12 @@ impl Tui {
         };
         let title = match self.calls.iter().find(|c| &c.public_key == p.get_public_key()) {
             Some(c) => match c.status {
-                CallStatus::PunchThroughSuccessfull => Span::styled(title_string, Style::default().fg(Color::Green)),
-                CallStatus::PunchThroughInProgress => Span::styled(public_key, Style::default().fg(Color::Blue)),
-                CallStatus::SentRequest => Span::styled(public_key, Style::default().fg(Color::Yellow)),
-                CallStatus::RequestFailed => Span::styled(public_key, Style::default().fg(Color::Red)),
+                CallStatus::PunchThroughSuccessfull => Span::from(title_string).green(),
+                CallStatus::PunchThroughInProgress => Span::from(public_key).blue(),
+                CallStatus::SentRequest => Span::from(public_key).yellow(),
+                CallStatus::RequestFailed => Span::from(public_key).red(),
             },
-            None => Span::styled(public_key, Style::default().fg(Color::DarkGray)),
+            None => Span::from(public_key).dark_gray(),
         };
 
         let chat_messages = List::new(chat_items).block(
@@ -311,11 +294,8 @@ impl Tui {
         let input = &self.peers.get(self.contact_list_state.selected().unwrap()).unwrap().chat_input;
         let input_string = input.get_string();
         let text = match input_string.is_empty() {
-            true => Span::styled(
-                format!("Send message to {}", selected_contact),
-                Style::default().fg(Color::Gray).add_modifier(Modifier::ITALIC),
-            ),
-            false => Span::styled(input_string.clone(), Style::default()),
+            true => Span::styled(format!("Send message to {}", selected_contact), Style::default().gray().italic()),
+            false => Span::from(input_string.clone()),
         };
 
         if !input_string.is_empty() && self.is_active && self.active_block == ActiveBlock::ChatInput {
@@ -344,8 +324,8 @@ impl Tui {
                 .collect::<Vec<ListItem>>(),
         )
         .block(Block::default().title("Debug Messages").borders(Borders::ALL))
-        .style(Style::default().fg(Color::White))
-        .highlight_style(Style::default().add_modifier(Modifier::BOLD))
+        .white()
+        .highlight_style(Style::default().bold())
         .highlight_symbol(">");
         f.render_stateful_widget(debug_message_list, area, &mut self.debug_messages_state);
     }

@@ -5,7 +5,7 @@ use p2pthing_common::encryption::NetworkedPublicKey;
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
-    style::{Color, Style},
+    style::{Color, Style, Stylize},
     widgets::{Block, BorderType, Borders, Clear, Paragraph, Wrap},
     Frame,
 };
@@ -107,7 +107,7 @@ impl CallPopup {
 
     fn get_button_style(&mut self, btn: SelectedButton) -> Style {
         match self.selected_button == btn {
-            true => Style::default().fg(Color::Yellow),
+            true => Style::default().yellow(),
             false => Style::default(),
         }
     }

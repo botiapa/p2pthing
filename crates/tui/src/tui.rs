@@ -9,7 +9,7 @@ use std::{
 };
 
 use crossterm::{
-    event::{DisableMouseCapture, EnableMouseCapture, Event},
+    event::{poll, DisableMouseCapture, EnableMouseCapture, Event},
     execute,
     terminal::{enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     QueueableCommand,
@@ -233,8 +233,8 @@ impl UI for Tui {
                 })
                 .unwrap();
         }
-        terminal.backend_mut().queue(LeaveAlternateScreen).unwrap().queue(DisableMouseCapture).unwrap();
         terminal.clear().unwrap();
+        terminal.backend_mut().queue(LeaveAlternateScreen).unwrap().queue(DisableMouseCapture).unwrap();
 
         let err = err.lock().unwrap();
         if !err.is_empty() {

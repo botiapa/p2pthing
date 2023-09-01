@@ -4,7 +4,7 @@ use std::{
 };
 
 use chrono::Utc;
-use crossterm::event::{read, Event, KeyCode, KeyModifiers};
+use crossterm::event::{read, Event, KeyCode, KeyEventKind, KeyModifiers};
 use num::FromPrimitive;
 use p2pthing_common::{
     debug_message::{DebugMessage, DebugMessageType},
@@ -173,7 +173,13 @@ impl Tui {
 
     pub fn handle_keyboard_mouse_events(&mut self) {
         loop {
-            match self.event_r.try_recv() {
+            let read = self.event_r.try_recv();
+            if let Ok(Ok(Event::Key(press))) = &read {
+                if press.kind == KeyEventKind::Press {
+                    continue; // Ignore "Press" events, so that events don't fire twice
+                }
+            }
+            match read {
                 Ok(e) => match e {
                     Ok(e) => {
                         match &mut self.active_popup {
