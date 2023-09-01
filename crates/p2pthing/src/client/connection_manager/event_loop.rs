@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use base64::encode_config;
+use base64::Engine;
 use chrono::Utc;
 use io::ErrorKind;
 use mio::{net::TcpStream, Events, Interest};
@@ -189,7 +189,7 @@ impl ConnectionManager {
                             ]
                             .concat();
                             let msg_id = Sha256::digest(&msg_id);
-                            let msg_id = encode_config(msg_id, base64::URL_SAFE);
+                            let msg_id = base64::engine::general_purpose::URL_SAFE.encode(msg_id);
 
                             let msg = msg_types::ChatMessage {
                                 author: self.encryption.get_public_key(),

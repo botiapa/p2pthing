@@ -2,7 +2,7 @@ use std::io::Stdout;
 
 use crossterm::event::{Event, KeyCode};
 use p2pthing_common::encryption::NetworkedPublicKey;
-use tui::{
+use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Margin, Rect},
     style::{Color, Style},
@@ -30,7 +30,7 @@ impl Popup for CallPopup {
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(25), Constraint::Percentage(50), Constraint::Percentage(25)])
             .split(area);
-        let popup_area = tui::layout::Layout::default()
+        let popup_area = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Percentage(25), Constraint::Percentage(40), Constraint::Percentage(35)])
             .split(popup_area[1]);
@@ -61,7 +61,7 @@ impl Popup for CallPopup {
         f.render_widget(yes_button, button_area[1]);
     }
 
-    fn handle_event(&mut self, e: Event) -> Option<PopupReturn> {
+    fn handle_event(&mut self, e: &Event) -> Option<PopupReturn> {
         match e {
             Event::Key(e) => {
                 match e.code {
@@ -90,8 +90,7 @@ impl Popup for CallPopup {
                     _ => {}
                 };
             }
-            Event::Mouse(_) => {}
-            Event::Resize(_, _) => {}
+            _ => {}
         };
         None
     }

@@ -177,24 +177,24 @@ impl Tui {
                 Ok(e) => match e {
                     Ok(e) => {
                         match &mut self.active_popup {
-                            Some(popup) => match popup.handle_event(e) {
+                            Some(popup) => match popup.handle_event(&e) {
                                 Some(ret) => self.handle_popup_return_value(ret),
                                 None => {}
                             },
                             None => {
                                 match &self.active_block {
-                                    ActiveBlock::ContactList => self.handle_contact_list_event(e),
-                                    ActiveBlock::ChatMessages => self.handle_chat_messages_event(e),
-                                    ActiveBlock::ChatInput => self.handle_chat_input_event(e),
-                                    ActiveBlock::InputList => self.handle_input_list_event(e),
-                                    ActiveBlock::OutputList => self.handle_output_list_event(e),
-                                    ActiveBlock::BitRateList => self.handle_bitrate_list_event(e),
-                                    ActiveBlock::Tabs => self.handle_tabs_input_event(e),
+                                    ActiveBlock::ContactList => self.handle_contact_list_event(&e),
+                                    ActiveBlock::ChatMessages => self.handle_chat_messages_event(&e),
+                                    ActiveBlock::ChatInput => self.handle_chat_input_event(&e),
+                                    ActiveBlock::InputList => self.handle_input_list_event(&e),
+                                    ActiveBlock::OutputList => self.handle_output_list_event(&e),
+                                    ActiveBlock::BitRateList => self.handle_bitrate_list_event(&e),
+                                    ActiveBlock::Tabs => self.handle_tabs_input_event(&e),
                                 }
-                                self.handle_global_event(e);
+                                self.handle_global_event(&e);
                             }
                         }
-                        self.handle_quit_event(e);
+                        self.handle_quit_event(&e);
                     }
                     Err(err) => self.log_message(
                         format!("Error while reading events: {}", err.to_string()),
@@ -209,7 +209,7 @@ impl Tui {
         }
     }
 
-    fn handle_quit_event(&mut self, e: Event) {
+    fn handle_quit_event(&mut self, e: &Event) {
         match e {
             Event::Key(e) => {
                 if e.code == KeyCode::Char('q')
@@ -222,7 +222,7 @@ impl Tui {
         }
     }
 
-    fn handle_global_event(&mut self, e: Event) {
+    fn handle_global_event(&mut self, e: &Event) {
         match e {
             Event::Key(e) => match e.code {
                 KeyCode::Enter => self.is_active = true,
@@ -279,12 +279,11 @@ impl Tui {
                 },
                 _ => {}
             },
-            Event::Mouse(_) => {}
-            Event::Resize(_, _) => {}
+            _ => {}
         }
     }
 
-    fn handle_input_list_event(&mut self, e: Event) {
+    fn handle_input_list_event(&mut self, e: &Event) {
         match e {
             Event::Key(e) => match e.code {
                 KeyCode::Up if self.is_active => match &self.settings_inputs {
@@ -304,7 +303,7 @@ impl Tui {
                 KeyCode::Enter if self.is_active => match &self.settings_inputs {
                     Some(inputs) => match self.settings_inputs_state.selected() {
                         Some(selected) => {
-                            let d = inputs.get(selected).unwrap();
+                            let d: &String = inputs.get(selected).unwrap();
                             self.cm_s
                                 .as_ref()
                                 .unwrap()
@@ -320,12 +319,11 @@ impl Tui {
                 KeyCode::Left if !self.is_active => self.active_block = ActiveBlock::BitRateList,
                 _ => {}
             },
-            Event::Mouse(_) => {}
-            Event::Resize(_, _) => {}
+            _ => {}
         }
     }
 
-    fn handle_output_list_event(&mut self, e: Event) {
+    fn handle_output_list_event(&mut self, e: &Event) {
         match e {
             Event::Key(e) => match e.code {
                 KeyCode::Up if self.is_active => match &self.settings_inputs {
@@ -345,7 +343,7 @@ impl Tui {
                 KeyCode::Enter if self.is_active => match &self.settings_outputs {
                     Some(outputs) => match self.settings_outputs_state.selected() {
                         Some(selected) => {
-                            let d = outputs.get(selected).unwrap();
+                            let d: &String = outputs.get(selected).unwrap();
                             self.cm_s
                                 .as_ref()
                                 .unwrap()
@@ -361,12 +359,11 @@ impl Tui {
                 KeyCode::Right if !self.is_active => self.active_block = ActiveBlock::BitRateList,
                 _ => {}
             },
-            Event::Mouse(_) => {}
-            Event::Resize(_, _) => {}
+            _ => {}
         }
     }
 
-    fn handle_bitrate_list_event(&mut self, e: Event) {
+    fn handle_bitrate_list_event(&mut self, e: &Event) {
         match e {
             Event::Key(e) => match e.code {
                 KeyCode::Up if self.is_active => match self.settings_kbits_state.selected() {
@@ -389,12 +386,11 @@ impl Tui {
                 KeyCode::Right if !self.is_active => self.active_block = ActiveBlock::InputList,
                 _ => {}
             },
-            Event::Mouse(_) => {}
-            Event::Resize(_, _) => {}
+            _ => {}
         }
     }
 
-    fn handle_contact_list_event(&mut self, e: Event) {
+    fn handle_contact_list_event(&mut self, e: &Event) {
         match e {
             Event::Key(e) => match e.code {
                 KeyCode::Enter if self.is_active => {
@@ -447,12 +443,11 @@ impl Tui {
                 }
                 _ => {}
             },
-            Event::Mouse(_) => {}
-            Event::Resize(_, _) => {}
+            _ => {}
         }
     }
 
-    fn handle_chat_messages_event(&mut self, e: Event) {
+    fn handle_chat_messages_event(&mut self, e: &Event) {
         if !self.is_active {
             self.chat_messages_list_state = None
         }
@@ -475,12 +470,11 @@ impl Tui {
                 KeyCode::Down if !self.is_active => self.active_block = ActiveBlock::ChatInput,
                 _ => {}
             },
-            Event::Mouse(_) => {}
-            Event::Resize(_, _) => {}
+            _ => {}
         }
     }
 
-    fn handle_chat_input_event(&mut self, e: Event) {
+    fn handle_chat_input_event(&mut self, e: &Event) {
         match e {
             Event::Key(e) => {
                 let input = &mut self.peers.get_mut(self.contact_list_state.selected().unwrap()).unwrap().chat_input;
@@ -496,12 +490,11 @@ impl Tui {
                     _ => {}
                 }
             }
-            Event::Mouse(_) => {}
-            Event::Resize(_, _) => {}
+            _ => {}
         }
     }
 
-    fn handle_tabs_input_event(&mut self, e: Event) {
+    fn handle_tabs_input_event(&mut self, e: &Event) {
         match e {
             Event::Key(e) => match e.code {
                 KeyCode::Enter => {
@@ -542,8 +535,7 @@ impl Tui {
                 },
                 _ => {}
             },
-            Event::Mouse(_) => {}
-            Event::Resize(_, _) => {}
+            _ => {}
         }
     }
 }

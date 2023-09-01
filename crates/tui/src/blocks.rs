@@ -1,16 +1,16 @@
-use std::{io::Stdout, time::Duration};
+use std::{io::Stdout, rc::Rc, time::Duration};
 
 use p2pthing_common::{
     debug_message::DebugMessageType,
     encryption::NetworkedPublicKey,
     ui::{CallStatus, CHOOSABLE_KBITS},
 };
-use tui::{
+use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     symbols::DOT,
-    text::{Span, Spans, Text},
+    text::{Line, Span, Text},
     widgets::{Block, BorderType, Borders, List, ListItem, ListState, Paragraph, Tabs, Wrap},
     Frame,
 };
@@ -29,7 +29,7 @@ impl Tui {
         }
     }
 
-    pub fn tab_divider(&mut self, screen: Rect) -> Vec<Rect> {
+    pub fn tab_divider(&mut self, screen: Rect) -> Rc<[Rect]> {
         Layout::default()
             .direction(Direction::Vertical)
             .margin(2)
@@ -37,7 +37,7 @@ impl Tui {
             .split(screen)
     }
 
-    pub fn tab_layout(&mut self, area: Rect) -> Vec<Rect> {
+    pub fn tab_layout(&mut self, area: Rect) -> Rc<[Rect]> {
         Layout::default()
             .direction(Direction::Horizontal)
             .margin(0)
@@ -45,7 +45,7 @@ impl Tui {
             .split(area)
     }
 
-    pub fn main_layout(&mut self, main_area: Rect) -> Vec<Rect> {
+    pub fn main_layout(&mut self, main_area: Rect) -> Rc<[Rect]> {
         Layout::default()
             .direction(Direction::Horizontal)
             .margin(0)
@@ -53,7 +53,7 @@ impl Tui {
             .split(main_area)
     }
 
-    pub fn settings_layout(&mut self, main_area: Rect) -> Vec<Rect> {
+    pub fn settings_layout(&mut self, main_area: Rect) -> Rc<[Rect]> {
         Layout::default()
             .direction(Direction::Vertical)
             .margin(0)
@@ -61,7 +61,7 @@ impl Tui {
             .split(main_area)
     }
 
-    pub fn setting_audio_options(&mut self, area: Rect) -> Vec<Rect> {
+    pub fn setting_audio_options(&mut self, area: Rect) -> Rc<[Rect]> {
         Layout::default()
             .direction(Direction::Horizontal)
             .margin(0)
@@ -128,7 +128,7 @@ impl Tui {
     }
 
     pub fn tabs(&mut self, f: &mut Frame<CrosstermBackend<Stdout>>, area: Rect) {
-        let titles = self.tab_titles.iter().cloned().map(Spans::from).collect();
+        let titles = self.tab_titles.iter().cloned().map(Span::from).collect();
         let tabs = Tabs::new(titles)
             .block(
                 Block::default()
@@ -155,7 +155,7 @@ impl Tui {
                 false => Span::styled("D ", Style::default().fg(Color::Red)),
             },
         ];
-        let icons = Paragraph::new(Spans::from(spans)).block(Block::default().borders(Borders::ALL));
+        let icons = Paragraph::new(Line::from(spans)).block(Block::default().borders(Borders::ALL));
         f.render_widget(icons, area);
     }
 
@@ -175,7 +175,7 @@ impl Tui {
     }
 
     /// This screen contains Peer information, the chat, and chat input in a vertical layout
-    pub fn main_screen(&mut self, area: Rect) -> Vec<Rect> {
+    pub fn main_screen(&mut self, area: Rect) -> Rc<[Rect]> {
         Layout::default()
             .direction(Direction::Vertical)
             .margin(0)
@@ -200,31 +200,31 @@ impl Tui {
             .constraints([Constraint::Length(50), Constraint::Max(999)].as_ref())
             .split(area);
 
-        let mut spans: Vec<Spans> = vec![];
-        spans.push(Spans::from(Span::from(format!("{}\n", p.get_public_key().to_string()))));
+        let mut spans: Vec<Line> = vec![];
+        spans.push(Line::from(Span::from(format!("{}\n", p.get_public_key().to_string()))));
         if let Some((_, stats)) = self.conn_stats.iter().find(|(p1, _)| p1 == p.get_public_key()) {
-            spans.push(Spans::from(vec![
+            spans.push(Line::from(vec![
                 Span::from("Sent: "),
                 Span::styled(
                     format!("{} bytes\n", stats.get_total_sent().to_string()),
                     Style::default().add_modifier(Modifier::BOLD),
                 ),
             ]));
-            spans.push(Spans::from(vec![
+            spans.push(Line::from(vec![
                 Span::from("Received: "),
                 Span::styled(
                     format!("{} bytes\n", stats.get_total_received().to_string()),
                     Style::default().add_modifier(Modifier::BOLD),
                 ),
             ]));
-            spans.push(Spans::from(vec![
+            spans.push(Line::from(vec![
                 Span::from("Sent average: "),
                 Span::styled(
                     format!("{} bytes/s\n", stats.get_avg_sent(Duration::from_secs(5)).unwrap_or(u64::MAX).to_string()),
                     Style::default().add_modifier(Modifier::BOLD),
                 ),
             ]));
-            spans.push(Spans::from(vec![
+            spans.push(Line::from(vec![
                 Span::from("Received average: "),
                 Span::styled(
                     format!(
@@ -234,7 +234,7 @@ impl Tui {
                     Style::default().add_modifier(Modifier::BOLD),
                 ),
             ]));
-            spans.push(Spans::from(vec![
+            spans.push(Line::from(vec![
                 Span::from("Last ping: "),
                 Span::styled(
                     format!("{} ms\n", stats.get_last_ping().unwrap_or(&Duration::from_secs(0)).as_millis()),

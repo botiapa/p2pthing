@@ -1,4 +1,4 @@
-use base64::encode_config;
+use base64::Engine;
 use std::{
     collections::HashMap,
     convert::TryInto,
@@ -101,7 +101,7 @@ impl FileManager {
 
         let file_id = [&filename.as_bytes(), &total_length.to_be_bytes()[..]].concat();
         let file_id = Sha256::digest(&file_id);
-        let file_id = encode_config(file_id, base64::URL_SAFE);
+        let file_id = base64::engine::general_purpose::URL_SAFE.encode(file_id);
         trace!("Starting to send file with id: {} and size: {}", file_id, total_length);
 
         // If the file is not already opened, then open it

@@ -12,7 +12,7 @@ use crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture, Event},
     execute,
     terminal::{enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-    ErrorKind, QueueableCommand,
+    QueueableCommand,
 };
 use mio::{Events, Poll, Token, Waker};
 use mio_misc::{
@@ -29,7 +29,7 @@ use p2pthing_common::{
     statistics::ConnectionStatistics,
     ui::{CallStatusHolder, UI},
 };
-use tui::{backend::CrosstermBackend, widgets::ListState, Terminal};
+use ratatui::{backend::CrosstermBackend, widgets::ListState, Terminal};
 
 use crate::{popup::Popup, ui_peer::UIPeer};
 
@@ -56,8 +56,8 @@ pub struct Tui {
     pub(crate) cm_s: Option<Sender<InterthreadMessage>>,
     pub(crate) ui_s: Sender<InterthreadMessage>,
     pub(crate) ui_r: Receiver<InterthreadMessage>,
-    pub(crate) event_s: Sender<Result<Event, ErrorKind>>,
-    pub(crate) event_r: Receiver<Result<Event, ErrorKind>>,
+    pub(crate) event_s: Sender<std::io::Result<Event>>,
+    pub(crate) event_r: Receiver<std::io::Result<Event>>,
     pub(crate) poll: Poll,
     pub(crate) peers: Vec<UIPeer>,
     pub(crate) contact_list_state: ListState,

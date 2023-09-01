@@ -1,11 +1,13 @@
 use core::fmt;
 use std::fmt::Display;
 
-use aes_gcm_siv::aead::{generic_array::GenericArray, Aead, NewAead};
-use aes_gcm_siv::Aes256GcmSiv; // Or `Aes128GcmSiv`
+use aes_gcm_siv::aead::{generic_array::GenericArray, Aead};
+use aes_gcm_siv::{Aes256GcmSiv, KeyInit}; // Or `Aes128GcmSiv`
 use num::Num;
 use rand_core::OsRng;
-use rsa::{errors::Error, BigUint, PaddingScheme, PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
+use rsa::traits::PublicKeyParts;
+use rsa::Oaep;
+use rsa::{errors::Error, BigUint, RsaPrivateKey, RsaPublicKey};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
@@ -28,8 +30,8 @@ impl AsymmetricEncryption {
     }
 
     pub fn decrypt(&self, data: &[u8]) -> Vec<u8> {
-        let padding = PaddingScheme::new_oaep::<sha2::Sha256>();
-        let dec_data = self.secret_key.decrypt(padding, &data).expect("Failed to decrypt");
+        let oaep = Oaep::new::<sha2::Sha256>();
+        let dec_data = self.secret_key.decrypt(oaep, &data).expect("Failed to decrypt");
         dec_data
     }
 }
@@ -51,8 +53,8 @@ impl NetworkedPublicKey {
 
     pub fn encrypt(&self, data: &[u8]) -> Vec<u8> {
         let public_key = self.recreate_my_public_key().unwrap();
-        let padding = PaddingScheme::new_oaep::<sha2::Sha256>();
-        let enc_data = public_key.encrypt(&mut OsRng, padding, &data[..]).expect("Failed to encrypt");
+        let oaep = Oaep::new::<sha2::Sha256>();
+        let enc_data = public_key.encrypt(&mut OsRng, oaep, &data[..]).expect("Failed to encrypt");
         enc_data
     }
 }
@@ -88,11 +90,13 @@ impl SymmetricEncryption {
         SymmetricEncryption { secret: secret.to_vec(), sym_key }
     }
 
+    // Disclaimer: I currently use a fixed nonce, since the message id is never the same. But maybe a random nonce would be a better choice.
     pub fn encrypt(&self, data: &[u8]) -> Vec<u8> {
         let nonce = GenericArray::from_slice(b"123456789123".as_ref());
         self.sym_key.encrypt(nonce, data).unwrap()
     }
 
+    // Disclaimer: I currently use a fixed nonce, since the message id is never the same. But maybe a random nonce would be a better choice.
     pub fn decrypt(&self, data: &[u8]) -> Vec<u8> {
         let nonce = GenericArray::from_slice(b"123456789123".as_ref());
         self.sym_key.decrypt(nonce, data).unwrap()
