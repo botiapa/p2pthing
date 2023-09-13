@@ -127,6 +127,7 @@ impl ConnectionManager {
         let mut udp_socket = UdpSocket::bind(SocketAddr::from_str("0.0.0.0:0").unwrap()).unwrap();
         poll.registry().register(&mut udp_socket, UDP_SOCKET, Interest::READABLE).unwrap();
 
+        // TODO: Handle if no network is available
         let multicast_socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP)).unwrap();
         multicast_socket.set_reuse_address(true).expect("Failed setting multicast socket to reuse_address");
         multicast_socket.set_nonblocking(true).expect("Failed setting multicast socket to nonblocking");

@@ -141,8 +141,12 @@ impl ConnectionManager {
             let mut magic = bincode::serialize(&MULTICAST_MAGIC).unwrap();
             magic.append(&mut announce);
 
-            self.udp_socket.send_to(&magic[..], MULTICAST_ADDRESS.parse().unwrap()).unwrap();
-            self.ui_s.log_info(&"Sent broadcast message");
+            let multicast_address = MULTICAST_ADDRESS.parse().expect("Failed parsing multicast address");
+            match self.udp_socket.send_to(&magic[..], multicast_address) {
+                Ok(_) => self.ui_s.log_info(&"Sent broadcast message"),
+                Err(err) => self.ui_s.log_error(&format!("Failed sending broadcast message: {}", err)),
+            }
+
             self.last_broadcast = Instant::now();
         }
     }
