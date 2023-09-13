@@ -35,6 +35,8 @@ mod tcp_messages;
 mod udp_messages;
 mod utils;
 
+mod handlers;
+
 const RENDEZVOUS: Token = Token(0);
 const WAKER: Token = Token(1);
 const UDP_SOCKET: Token = Token(2);
