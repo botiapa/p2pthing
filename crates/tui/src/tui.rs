@@ -1,5 +1,5 @@
 use std::{
-    io::stdout,
+    io::{self, stdout},
     panic,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -9,7 +9,7 @@ use std::{
 };
 
 use crossterm::{
-    event::{poll, DisableMouseCapture, EnableMouseCapture, Event},
+    event::{DisableMouseCapture, EnableMouseCapture, Event},
     execute,
     terminal::{enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     QueueableCommand,
@@ -176,7 +176,9 @@ impl UI for Tui {
 
         let mut events = Events::with_capacity(1);
         while self.running.load(Ordering::SeqCst) {
-            self.poll.poll(&mut events, None).unwrap();
+            if let Err(err) = self.poll.poll(&mut events, None) {
+                println!("Error: {}", err);
+            }
 
             // Tries to avoid a crash which happens if a terminal's height is too low
             if terminal.size().unwrap().height <= 1 {
