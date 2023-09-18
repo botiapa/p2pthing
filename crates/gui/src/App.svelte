@@ -33,6 +33,7 @@
 
 		const unl3 = listen("tauri://file-drop", (e) => {
 			const paths = e.payload as string[];
+			console.log("Dropping file(s):", paths);
 			if (paths.length > 0 && $data.selected_peer) {
 				invoke("send_event", {
 					event: { SendChatMessage: [$data.selected_peer?.public_key, "", paths] },

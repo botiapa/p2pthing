@@ -50,13 +50,14 @@
 		"allowlist": {
 			"fs": {
 				"readFile": true,
-				"scope": ["$APPDATA/p2pthing/**"]
+				"scope": ["$APPDATA/**"]
 			},
 			"path": {
 				"all": true
 			},
 			"protocol": {
-				"asset": true
+				"asset": true,
+				"assetScope": ["$APPDATA/**"]
 			}
 		},
 		"windows": [

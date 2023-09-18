@@ -104,6 +104,7 @@ impl FileManager {
         let file_id = [&filename.as_bytes(), &total_length.to_be_bytes()[..]].concat();
         let file_id = Sha256::digest(&file_id);
         let file_id = base64::engine::general_purpose::URL_SAFE.encode(file_id);
+        self.ui_s.log_info(&format!("Started sending file id: {}", file_id));
         trace!("Starting to send file with id: {} and size: {}", file_id, total_length);
 
         // If the file is not already opened, then open it
@@ -124,7 +125,11 @@ impl FileManager {
             .join(DOWNLOADS_FOLDER)
             .join(file.file_id.clone())
             .with_extension(original_name.extension().unwrap());
+
+        // TODO: Download should continue
         self.open_file(&file.file_id, &download_path, true, Some(file.total_length))?;
+
+        self.ui_s.log_info(&format!("Started receiving file path: {}", download_path.to_str().unwrap()));
 
         // TODO: Enable receiving same file from multiple senders
         if !self.receiving_chunks.contains_key(&file.file_id) {
@@ -276,7 +281,6 @@ impl FileManager {
                 self.receiving_chunks.remove(&file).unwrap();
                 self.file_senders.remove(&file).unwrap();
 
-                // TODO: Properly notify UI
                 let stats = self.transfer_statistics.get_mut(&file).unwrap();
                 stats.state = TransferState::Complete;
 
@@ -296,6 +300,7 @@ impl FileManager {
                         mbs
                     );
                 }
+                self.ui_s.send(InterthreadMessage::TransferStatistics(self.transfer_statistics.clone())).unwrap();
 
                 drop(open_file);
             }
@@ -314,8 +319,8 @@ impl FileManager {
         set_file_length: Option<u64>,
     ) -> io::Result<()> {
         if !self.open_files.contains_key(file_id) {
-            fs::create_dir_all(path.clone())?;
-            let file = fs::OpenOptions::new().read(true).write(true).create_new(create).open(path.clone())?;
+            fs::create_dir_all(path.parent().expect("Failed getting path parents"))?;
+            let file = fs::OpenOptions::new().read(true).write(true).create(create).open(path.clone())?;
 
             if let Some(len) = set_file_length {
                 file.set_len(len)?;

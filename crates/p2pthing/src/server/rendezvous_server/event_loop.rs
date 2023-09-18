@@ -72,7 +72,7 @@ impl RendezvousServer {
         let mut msg_size = [0u8; 8];
         loop {
             let sock = self.tcp_connections.get_mut(&token).unwrap();
-            let addr = sock.peer_addr().unwrap();
+            let addr = sock.peer_addr().unwrap(); // TODO: Dont't rely on address, since it can be null if disconnected while handling event. Relyon token instead
             match sock.read(&mut msg_size) {
                 Ok(0) => {
                     self.on_disconnect(addr, token);

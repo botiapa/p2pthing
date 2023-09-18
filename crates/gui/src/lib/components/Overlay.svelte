@@ -3,8 +3,6 @@
 	import { fade } from "svelte/transition";
 
 	export let dropping: boolean;
-
-	$: console.log("Dropping: ", dropping);
 </script>
 
 <template lang="pug">

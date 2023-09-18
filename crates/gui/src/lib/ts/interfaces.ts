@@ -89,7 +89,11 @@ export class GuiFile implements IPreparedFile {
 
 	public async generate_absolute_path() {
 		this.absolute_path = convertFileSrc(
-			await path.join(await appDataDir(), this.file_id + this.file_extension)
+			await path.join(
+				await appDataDir(),
+				"downloads",
+				this.file_id + "." + this.file_extension
+			)
 		);
 	}
 }

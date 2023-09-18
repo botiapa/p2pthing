@@ -20,8 +20,6 @@
 		event.preventDefault(); // No need to `return false;`.
 	}
 
-	$: console.log("Messages: ", $data.selected_peer?.messages);
-
 	let container;
 </script>
 

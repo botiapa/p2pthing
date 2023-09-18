@@ -17,13 +17,9 @@
         .contents(class:unread="{message.received === false}") {message.msg}
         +if("message.attachments")
             +each('message.attachments as file (file.file_id)')
-                p {file.file_name}
                 +if('$data.transfer_statistics[file.file_id]')
                     +if('$data.transfer_statistics[file.file_id]?.state == "Complete" && file.absolute_path')
-                        img.attachment(src="{file.absolute_path}")
-                        p Bytes read {$data.transfer_statistics[file.file_id]?.bytes_read}
-                        p Bytes written {$data.transfer_statistics[file.file_id]?.bytes_written}
-                        p Started {$data.transfer_statistics[file.file_id]?.started.toString()}
+                        img.attachment(src="{file.absolute_path}" alt="{file.file_name}")
                         +else
                             progress(value="{$data.transfer_statistics[file.file_id].bytes_written/file.total_length}")
                     
