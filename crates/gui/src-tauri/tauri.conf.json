@@ -70,7 +70,7 @@
 			}
 		],
 		"security": {
-			"csp": "default-src blob: asset: https://asset.localhost data: filesystem: ws: wss: http: https: tauri: 'unsafe-eval' 'unsafe-inline' 'self' img-src: 'self'"
+			"csp": "default-src blob: asset: https://asset.localhost data: filesystem: ws: wss: http: https: tauri: 'unsafe-eval' 'unsafe-inline' media-src img-src: 'self'"
 		}
 	}
 }

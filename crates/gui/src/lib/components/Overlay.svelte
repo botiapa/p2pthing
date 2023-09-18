@@ -28,6 +28,7 @@
 		align-items: center
 		justify-content: center
 	.overlay img
-		width: 80%
+		max-width: 80%
+		max-height: 80%
 		border-radius: 3px
 </style>

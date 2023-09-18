@@ -19,7 +19,12 @@
             +each('message.attachments as file (file.file_id)')
                 +if('$data.transfer_statistics[file.file_id]')
                     +if('($data.transfer_statistics[file.file_id]?.state == "Complete" || message.author.equals($data.own_public_key)) && file.absolute_path')
-                        img.attachment(src="{file.absolute_path}" alt="{file.file_name}" on:click!="{() => $showcased_image = file.absolute_path}")
+                        +if('file.file_name.endsWith(".png") || file.file_name.endsWith(".jpg") || file.file_name.endsWith(".jpeg")')
+                            img.attachment(src="{file.absolute_path}" alt="{file.file_name}" on:click!="{() => $showcased_image = file.absolute_path}")
+                            +elseif('file.file_name.endsWith(".mp4") || file.file_name.endsWith(".webm")')
+                                video.attachment(src="{file.absolute_path}" alt="{file.file_name}")
+                            +else
+                                a.attachment(href="{file.absolute_path}" download="{file.file_name}") {file.file_name}
                         +else
                             progress(value="{$data.transfer_statistics[file.file_id].bytes_written/file.total_length}")
                     
