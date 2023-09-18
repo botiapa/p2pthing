@@ -1,15 +1,18 @@
 <script lang="ts">
-	import { data } from "../ts/stores";
+	import { data, showcased_image } from "../ts/stores";
 	import { fade } from "svelte/transition";
 
 	export let dropping: boolean;
 </script>
 
 <template lang="pug">
-    
-    +if('dropping')
-	    .overlay(transition:fade="{{duration: 100}}")
-            h2 Sending files to: {$data.selected_peer?.public_key.n.slice(0, 10)}
+	
+	+if('dropping')
+		.overlay(transition:fade="{{duration: 100}}")
+			h2 Sending files to: {$data.selected_peer?.public_key.n.slice(0, 10)}
+		+elseif('$showcased_image')
+			.overlay(transition:fade="{{duration: 100}}" on:click!="{() => $showcased_image = null}")
+				img(src="{$showcased_image}" alt="{$showcased_image}" on:click|preventDefault!=("{e => e.stopPropagation()}"))
 
 </template>
 
@@ -24,4 +27,7 @@
 		display: flex
 		align-items: center
 		justify-content: center
+	.overlay img
+		width: 80%
+		border-radius: 3px
 </style>
