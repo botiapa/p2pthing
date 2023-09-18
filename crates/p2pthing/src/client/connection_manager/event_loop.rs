@@ -47,7 +47,9 @@ impl ConnectionManager {
 
                 trace_span!("polling for events", next_poll_duration = durations.first().cloned().unwrap().as_millis())
                     .in_scope(|| {
-                        self.poll.poll(&mut events, durations.first().cloned()).unwrap();
+                        if let Err(err) = self.poll.poll(&mut events, durations.first().cloned()) {
+                            self.ui_s.log_error(&format!("Error while polling: {}", err.to_string()));
+                        }
                     });
 
                 // Remove old call requests

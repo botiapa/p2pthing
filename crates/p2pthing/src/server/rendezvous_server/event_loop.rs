@@ -12,7 +12,10 @@ impl RendezvousServer {
     pub fn event_loop(&mut self) {
         loop {
             let mut events = Events::with_capacity(1024);
-            self.poll.poll(&mut events, None).unwrap();
+            if let Err(err) = self.poll.poll(&mut events, None) {
+                println!("Error while polling: {:?}", err);
+                continue;
+            }
             for event in events.iter() {
                 match event.token() {
                     TCP_LISTENER => {
