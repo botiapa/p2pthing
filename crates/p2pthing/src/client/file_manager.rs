@@ -32,7 +32,7 @@ pub struct FileManager {
     /// Map the files to a vector where the index is the chunkindex and the value is whether it has been received.
     receiving_chunks: HashMap<FileId, Vec<ReceivableChunk>>,
     file_senders: HashMap<FileId, NetworkedPublicKey>,
-    read_buffer: Vec<u8>,
+    read_buffer: [u8; CHUNK_SIZE],
     ui_s: Sender<InterthreadMessage>,
     /// Requests that haven't been sent to their respective peers
     new_requests: HashMap<NetworkedPublicKey, Vec<FileChunk>>,
@@ -77,7 +77,7 @@ impl FileManager {
             open_files: HashMap::new(),
             receiving_chunks: HashMap::new(),
             file_senders: HashMap::new(),
-            read_buffer: vec![0u8; CHUNK_SIZE],
+            read_buffer: [0u8; CHUNK_SIZE],
             ui_s,
             new_requests: HashMap::new(),
         }
