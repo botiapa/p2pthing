@@ -7,11 +7,11 @@
 	import { onDestroy, onMount } from "svelte";
 	import { CallStatus, NetworkedPublicKey, UIPeer } from "./lib/ts/interfaces";
 	import { build_event_handler } from "./lib/ts/events";
-	import { writable } from "svelte/store";
-	import { data } from "./lib/ts/stores";
+	import { get, writable } from "svelte/store";
 	import { invoke } from "@tauri-apps/api/tauri";
 	import { unlisten_all } from "./lib/ts/helpers";
 	import { resourceDir } from "@tauri-apps/api/path";
+	import { selected_peer, own_public_key } from "./lib/ts/stores";
 
 	let sidebar;
 	let dropping: boolean = false;
@@ -20,13 +20,13 @@
 
 	function main() {
 		const unl1 = listen("client-event", async (event) => {
-			const new_data = await handler.handle($data, event);
-			if (new_data) data.set(new_data);
+			await handler.handle(event);
+			selected_peer.set(get(selected_peer)); // FIXME: This is a hack to force a re-render. This shouldn't be necessary. For some reason, the store doesn't update the UI when the peer is updated.
 		});
 
 		const unl2 = listen("tauri://file-drop-hover", async (e) => {
 			const validPaths = e.payload as string[];
-			if (validPaths.length > 0 && $data.selected_peer) {
+			if (validPaths.length > 0 && $selected_peer) {
 				dropping = true;
 			}
 		});
@@ -34,9 +34,9 @@
 		const unl3 = listen("tauri://file-drop", (e) => {
 			const paths = e.payload as string[];
 			console.log("Dropping file(s):", paths);
-			if (paths.length > 0 && $data.selected_peer) {
+			if (paths.length > 0 && $selected_peer) {
 				invoke("send_event", {
-					event: { SendChatMessage: [$data.selected_peer?.public_key, "", paths] },
+					event: { SendChatMessage: [$selected_peer?.public_key, "", paths] },
 				});
 			}
 			dropping = false;
@@ -47,8 +47,7 @@
 		});
 
 		invoke("get_own_public_key").then((public_key: NetworkedPublicKey) => {
-			$data.own_public_key = new NetworkedPublicKey(public_key);
-			data.set($data);
+			own_public_key.set(new NetworkedPublicKey(public_key));
 
 			emit("gui-started");
 		});
@@ -66,7 +65,7 @@
 <template lang="pug">
 	#main
 		#sidebar: Sidebar(bind:this="{sidebar}")
-		+if('$data.selected_peer?.call_status == CallStatus.PunchthroughSuccessfull')
+		+if('$selected_peer?.call_status == CallStatus.PunchthroughSuccessfull')
 			#chat: Chat
 	Overlay(dropping="{dropping}")
 

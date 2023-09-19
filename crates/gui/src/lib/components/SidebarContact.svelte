@@ -6,7 +6,7 @@
 	import accept_icon from "../../assets/checkmark.svg?raw";
 	import deny_icon from "../../assets/close.svg?raw";
 	import { invoke } from "@tauri-apps/api/tauri";
-	import { data } from "../ts/stores";
+	import { get_peer, peers, update_peer } from "../ts/stores";
 
 	export let peer: UIPeer;
 	export let selected: boolean;
@@ -43,25 +43,21 @@
 		invoke("send_event", {
 			event: { Call: peer.public_key },
 		});
-		$data.p(peer.public_key).call_status = CallStatus.SentRequest;
-		data.set($data); // Force update
+		update_peer(peer.public_key, (p) => (p.call_status = CallStatus.SentRequest));
 	}
 
 	function on_accept() {
 		invoke("send_event", {
 			event: { CallAccepted: peer.public_key },
 		});
-		$data.p(peer.public_key).call_status =
-			CallStatus.PunchthroughInProgress;
-		data.set($data); // Force update
+		update_peer(peer.public_key, (p) => (p.call_status = CallStatus.PunchthroughInProgress));
 	}
 
 	function on_deny() {
 		invoke("send_event", {
 			event: { CallDenied: peer.public_key },
 		});
-		$data.p(peer.public_key).call_status = CallStatus.RequestFailed;
-		data.set($data); // Force update
+		update_peer(peer.public_key, (p) => (p.call_status = CallStatus.RequestFailed));
 	}
 </script>
 

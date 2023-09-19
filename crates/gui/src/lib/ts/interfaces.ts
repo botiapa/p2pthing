@@ -2,20 +2,6 @@ import { fs, path } from "@tauri-apps/api";
 import { BaseDirectory, appDataDir } from "@tauri-apps/api/path";
 import { convertFileSrc } from "@tauri-apps/api/tauri";
 
-export class GuiData {
-	peers: UIPeer[] = [];
-	selected_peer?: UIPeer;
-	own_public_key?: NetworkedPublicKey;
-	transfer_statistics: Map<String, TransferStatistics> = new Map();
-
-	/**
-		Find the specified peer
-	*/
-	p(p: NetworkedPublicKey): UIPeer | undefined {
-		return this.peers.find((elem) => elem.public_key.equals(p));
-	}
-}
-
 export interface IPeer {
 	public_key: NetworkedPublicKey;
 }

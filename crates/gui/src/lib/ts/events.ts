@@ -1,14 +1,23 @@
+import { get, type Writable } from "svelte/store";
 import {
 	CallStatus,
 	ChatMessage,
 	ChatMessageUI,
-	GuiData,
 	NetworkedPublicKey,
 	TransferStatistics,
 	UIPeer,
 } from "./interfaces";
+import {
+	get_peer,
+	own_public_key,
+	peers,
+	selected_peer,
+	transfer_statistics,
+	update_peer,
+} from "./stores";
 
-type Handler = (data: GuiData, event_data: any) => Promise<GuiData | void>;
+type HandlerReturnType = Promise<void>;
+type Handler = (event_data: any) => HandlerReturnType;
 export class EventHandler {
 	handlers: Map<string, Handler> = new Map();
 
@@ -19,10 +28,10 @@ export class EventHandler {
 		return this;
 	}
 
-	async handle(data: GuiData, event: any): Promise<GuiData | void> {
+	async handle(event: any): Promise<void> {
 		for (const [event_name, handler] of this.handlers) {
 			if (event.payload.hasOwnProperty(event_name)) {
-				return handler(data, event.payload[event_name]);
+				return handler(event.payload[event_name]);
 			}
 		}
 		console.error("Failed to find a handler for the given event: ", event);
@@ -47,82 +56,68 @@ export function build_event_handler(): EventHandler {
 	return event_handler;
 }
 
-async function on_debug_message(data: GuiData, debug_data: any) {
+async function on_debug_message(debug_data: any) {
 	console.log(`${debug_data[1]}: ${debug_data[0]}`);
 }
 
-async function on_announce_response(data: GuiData, peers: any[]) {
-	for (const public_key of peers) {
-		if (!data.p(public_key)) {
-			data.peers.push(new UIPeer(public_key));
+async function on_announce_response(event_peers: any[]): HandlerReturnType {
+	for (const public_key of event_peers) {
+		if (!get_peer(public_key)) {
+			peers.update((p) => {
+				let new_peer = new UIPeer(public_key);
+				p.push(new_peer);
+				return p;
+			});
 		}
 	}
-	return data;
 }
 
-async function on_peer_disconnected(data: GuiData, public_key: any) {
-	if (data.selected_peer.public_key.equals(public_key)) data.selected_peer = null;
-	data.peers = data.peers.filter((peer) => !peer.public_key.equals(public_key));
-	return data;
+async function on_peer_disconnected(public_key: any) {
+	if (get(selected_peer).public_key.equals(public_key)) selected_peer.set(null);
+	peers.update((p) => p.filter((peer) => !peer.public_key.equals(public_key)));
 }
 
-async function on_punchthrough_successfull(data: GuiData, public_key: any) {
-	data.p(public_key).call_status = CallStatus.PunchthroughSuccessfull;
-	return data;
+async function on_punchthrough_successfull(public_key: any) {
+	update_peer(public_key, (p) => (p.call_status = CallStatus.PunchthroughSuccessfull));
 }
 
-async function on_call_denied(data: GuiData, public_key: any) {
-	data.p(public_key).call_status = CallStatus.RequestFailed;
-	return data;
+async function on_call_denied(public_key: any) {
+	update_peer(public_key, (p) => (p.call_status = CallStatus.RequestFailed));
 }
 
-async function on_call(data: GuiData, public_key: any) {
-	data.p(public_key).call_status = CallStatus.WaitingForAnswer;
-	return data;
+async function on_call(public_key: any) {
+	update_peer(public_key, (p) => (p.call_status = CallStatus.WaitingForAnswer));
 }
 
-async function on_call_accepted(data: GuiData, public_key: any) {
-	data.p(public_key).call_status = CallStatus.PunchthroughInProgress;
-	return data;
+async function on_call_accepted(public_key: any) {
+	update_peer(public_key, (p) => (p.call_status = CallStatus.PunchthroughInProgress));
 }
 
-async function on_chat_message(data: GuiData, msg: ChatMessage) {
+async function on_chat_message(msg: ChatMessage) {
 	let other_peer: NetworkedPublicKey;
-	if (!NetworkedPublicKey.equals(msg.author, data.own_public_key)) other_peer = msg.author;
-	else if (!NetworkedPublicKey.equals(msg.recipient, data.own_public_key))
-		other_peer = msg.recipient;
+	let _own_public_key = get(own_public_key);
+	if (!NetworkedPublicKey.equals(msg.author, _own_public_key)) other_peer = msg.author;
+	else if (!NetworkedPublicKey.equals(msg.recipient, _own_public_key)) other_peer = msg.recipient;
 	else console.error("Tried sending message to yourself.");
-	let p = data.peers.find((p) => NetworkedPublicKey.equals(p.public_key, other_peer));
-	let new_msg = new ChatMessageUI(
-		msg,
-		NetworkedPublicKey.equals(msg.recipient, data.own_public_key)
-	);
+	let new_msg = new ChatMessageUI(msg, NetworkedPublicKey.equals(msg.recipient, _own_public_key));
 	await new_msg.generate_absolute_paths();
-	p.messages.push(new_msg);
-
-	return data;
+	update_peer(other_peer, (p) => p.messages.push(new_msg));
 }
 
-async function on_chat_message_received(data: GuiData, id: string) {
-	for (const peer of data.peers) {
+async function on_chat_message_received(id: string) {
+	for (const peer of get(peers)) {
 		for (const msg of peer.messages) {
 			if (msg.id === id) msg.received = true;
 		}
 	}
-
-	return data;
 }
 
-async function on_audio_new_input_devices(data: GuiData, debug_data: any) {}
+async function on_audio_new_input_devices(debug_data: any) {}
 
-async function on_audio_new_output_devices(data: GuiData, debug_data: any) {}
+async function on_audio_new_output_devices(debug_data: any) {}
 
-async function on_connection_statistics(data: GuiData, debug_data: any) {}
+async function on_connection_statistics(debug_data: any) {}
 
-async function on_transfer_statistics(
-	data: GuiData,
-	transfer_statistics: Map<String, TransferStatistics>
-) {
-	data.transfer_statistics = transfer_statistics;
-	return data;
+async function on_transfer_statistics(new_transfer_statistics: Map<String, TransferStatistics>) {
+	transfer_statistics.set(new_transfer_statistics);
 }

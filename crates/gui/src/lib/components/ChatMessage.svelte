@@ -1,7 +1,7 @@
 <script lang="ts">
-	import type { ChatMessage, UIPeer } from "../ts/interfaces";
+	import type { ChatMessage } from "../ts/interfaces";
 
-	import { data, showcased_image } from "../ts/stores";
+	import { showcased_image, transfer_statistics, own_public_key } from "../ts/stores";
 	import { path } from "@tauri-apps/api";
 
 	export let message: ChatMessage;
@@ -9,7 +9,7 @@
 
 	let view_as_text: boolean = false;
 
-	$: console.log(`transfers: `, $data.transfer_statistics);
+	$: console.log(`transfers: `, $transfer_statistics);
 </script>
 
 <template lang="pug">
@@ -19,8 +19,8 @@
         .contents(class:unread="{message.received === false}") {message.msg}
         +if("message.attachments")
             +each('message.attachments as file (file.file_id)')
-                +if('$data.transfer_statistics[file.file_id]')
-                    +if('($data.transfer_statistics[file.file_id]?.state == "Complete" || message.author.equals($data.own_public_key)) && file.absolute_path')
+                +if('$transfer_statistics[file.file_id]')
+                    +if('($transfer_statistics[file.file_id]?.state == "Complete" || message.author.equals($own_public_key)) && file.absolute_path')
                         +if('file.file_name.endsWith(".png") || file.file_name.endsWith(".jpg") || file.file_name.endsWith(".jpeg")')
                             img.attachment(src="{file.absolute_path}" alt="{file.file_name}" on:click!="{() => $showcased_image = file.absolute_path}")
                             +elseif('file.file_name.endsWith(".mp4") || file.file_name.endsWith(".webm")')
@@ -33,7 +33,7 @@
                                         a.attachment(href="{file.absolute_path}" download="{file.file_name}") {file.file_name}
                                         button(on:click!="{() => view_as_text = true}") View as text ({file.human_readable_size()})
                         +else
-                            progress(value="{$data.transfer_statistics[file.file_id].bytes_written/file.total_length}")
+                            progress(value="{$transfer_statistics[file.file_id].bytes_written/file.total_length}")
                     
 
 </template>

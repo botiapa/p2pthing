@@ -1,19 +1,19 @@
 <script lang="ts">
 	import { invoke } from "@tauri-apps/api/tauri";
 
-	import { data } from "../ts/stores";
+	import { selected_peer } from "../ts/stores";
 	import ChatMessage from "./ChatMessage.svelte";
 	import { ChatMessage as ChatMessageClass } from "../ts/interfaces";
 
 	let msg_input: string = "";
 
-	$: shortname = $data.selected_peer?.public_key.n.slice(0, 10);
+	$: shortname = $selected_peer?.public_key.n.slice(0, 10);
 
 	async function on_key_up(event) {
 		if (event.key !== "Enter" || msg_input.trim() == "") return;
 		await invoke("send_event", {
 			event: {
-				SendChatMessage: [$data.selected_peer?.public_key, msg_input, []],
+				SendChatMessage: [$selected_peer?.public_key, msg_input, []],
 			},
 		});
 		msg_input = "";
@@ -29,8 +29,8 @@
             div {shortname}
         #chat-box
             #chat-messages
-                +each('$data.selected_peer?.messages as message, i')
-                    ChatMessage(message="{message}" name_visible="{!$data.selected_peer?.messages[i-1]?.author.equals(message.author)}")
+                +each('$selected_peer?.messages as message, i (message)')
+                    ChatMessage(message="{message}" name_visible="{!$selected_peer?.messages[i-1]?.author.equals(message.author)}")
         input#chat-input(placeholder="Message {shortname}" bind:value="{msg_input}" on:keyup="{on_key_up}")
 </template>
 

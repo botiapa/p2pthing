@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { data, showcased_image } from "../ts/stores";
+	import { showcased_image, selected_peer } from "../ts/stores";
 	import { fade } from "svelte/transition";
 
 	export let dropping: boolean;
@@ -9,7 +9,7 @@
 	
 	+if('dropping')
 		.overlay(transition:fade="{{duration: 100}}")
-			h2 Sending files to: {$data.selected_peer?.public_key.n.slice(0, 10)}
+			h2 Sending files to: {$selected_peer?.public_key.n.slice(0, 10)}
 		+elseif('$showcased_image')
 			.overlay(transition:fade="{{duration: 100}}" on:click!="{() => $showcased_image = null}")
 				img(src="{$showcased_image}" alt="{$showcased_image}" on:click|preventDefault!=("{e => e.stopPropagation()}"))
