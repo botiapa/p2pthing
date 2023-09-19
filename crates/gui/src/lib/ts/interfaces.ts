@@ -1,5 +1,5 @@
-import { path } from "@tauri-apps/api";
-import { appDataDir } from "@tauri-apps/api/path";
+import { fs, path } from "@tauri-apps/api";
+import { BaseDirectory, appDataDir } from "@tauri-apps/api/path";
 import { convertFileSrc } from "@tauri-apps/api/tauri";
 
 export class GuiData {
@@ -73,12 +73,19 @@ export interface IPreparedFile {
 	total_length: number;
 }
 
+const downloads_folder: string = "downloads";
 export class GuiFile implements IPreparedFile {
 	file_id: string;
 	file_name: string;
 	file_extension: string;
 	total_length: number;
 	absolute_path?: string;
+
+	private file_contents?: string;
+
+	get_converted_file_name(): string {
+		return this.file_id + "." + this.file_extension;
+	}
 
 	constructor(f: IPreparedFile) {
 		this.file_id = f.file_id;
@@ -89,12 +96,38 @@ export class GuiFile implements IPreparedFile {
 
 	public async generate_absolute_path() {
 		this.absolute_path = convertFileSrc(
-			await path.join(
-				await appDataDir(),
-				"downloads",
-				this.file_id + "." + this.file_extension
-			)
+			await path.join(await appDataDir(), downloads_folder, this.get_converted_file_name())
 		);
+	}
+
+	public human_readable_size(): string {
+		let size = this.total_length;
+		let unit = "B";
+		if (size > 1024) {
+			size /= 1024;
+			unit = "KB";
+		}
+		if (size > 1024) {
+			size /= 1024;
+			unit = "MB";
+		}
+		if (size > 1024) {
+			size /= 1024;
+			unit = "GB";
+		}
+		return size.toFixed(2) + " " + unit;
+	}
+
+	public async get_file_contents(): Promise<string> {
+		if (!this.file_contents) {
+			this.file_contents = await fs.readTextFile(
+				await path.join(downloads_folder, this.get_converted_file_name()),
+				{
+					dir: BaseDirectory.AppData,
+				}
+			);
+		}
+		return this.file_contents;
 	}
 }
 

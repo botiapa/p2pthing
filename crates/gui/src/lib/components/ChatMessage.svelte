@@ -7,6 +7,8 @@
 	export let message: ChatMessage;
 	export let name_visible: boolean;
 
+	let view_as_text: boolean = false;
+
 	$: console.log(`transfers: `, $data.transfer_statistics);
 </script>
 
@@ -24,7 +26,12 @@
                             +elseif('file.file_name.endsWith(".mp4") || file.file_name.endsWith(".webm")')
                                 video.attachment(src="{file.absolute_path}" alt="{file.file_name}")
                             +else
-                                a.attachment(href="{file.absolute_path}" download="{file.file_name}") {file.file_name}
+                                +if('view_as_text')
+                                    +await('file.get_file_contents() then file_contents')
+                                        textarea.attachment(readonly=true) {file_contents}
+                                    +else
+                                        a.attachment(href="{file.absolute_path}" download="{file.file_name}") {file.file_name}
+                                        button(on:click!="{() => view_as_text = true}") View as text ({file.human_readable_size()})
                         +else
                             progress(value="{$data.transfer_statistics[file.file_id].bytes_written/file.total_length}")
                     
@@ -44,5 +51,11 @@
     
     .attachment
         max-height: 15vw
+        max-width: 30vw
         cursor: pointer
+    
+    textarea.attachment
+        min-width: 65%
+        min-height: 30vw
+        cursor: text
 </style>
