@@ -1,4 +1,4 @@
-import { get, type Writable } from "svelte/store";
+import { get, writable, type Writable } from "svelte/store";
 import {
 	CallStatus,
 	ChatMessage,
@@ -15,6 +15,7 @@ import {
 	transfer_statistics,
 	update_peer,
 } from "./stores";
+import { tick } from "svelte";
 
 type HandlerReturnType = Promise<void>;
 type Handler = (event_data: any) => HandlerReturnType;
@@ -31,7 +32,7 @@ export class EventHandler {
 	async handle(event: any): Promise<void> {
 		for (const [event_name, handler] of this.handlers) {
 			if (event.payload.hasOwnProperty(event_name)) {
-				return handler(event.payload[event_name]);
+				return await handler(event.payload[event_name]);
 			}
 		}
 		console.error("Failed to find a handler for the given event: ", event);
@@ -65,15 +66,14 @@ async function on_announce_response(event_peers: any[]): HandlerReturnType {
 		if (!get_peer(public_key)) {
 			peers.update((p) => {
 				let new_peer = new UIPeer(public_key);
-				p.push(new_peer);
-				return p;
+				if (p.length == 1) new_peer.selected = true;
+				return [...p, new_peer];
 			});
 		}
 	}
 }
 
 async function on_peer_disconnected(public_key: any) {
-	if (get(selected_peer).public_key.equals(public_key)) selected_peer.set(null);
 	peers.update((p) => p.filter((peer) => !peer.public_key.equals(public_key)));
 }
 
@@ -105,11 +105,14 @@ async function on_chat_message(msg: ChatMessage) {
 }
 
 async function on_chat_message_received(id: string) {
-	for (const peer of get(peers)) {
-		for (const msg of peer.messages) {
-			if (msg.id === id) msg.received = true;
+	peers.update((p) => {
+		for (const peer of p) {
+			for (const msg of peer.messages) {
+				if (msg.id === id) msg.received = true;
+			}
 		}
-	}
+		return p;
+	});
 }
 
 async function on_audio_new_input_devices(debug_data: any) {}

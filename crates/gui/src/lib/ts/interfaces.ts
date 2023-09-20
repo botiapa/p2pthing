@@ -10,6 +10,7 @@ export class UIPeer implements IPeer {
 	public_key: NetworkedPublicKey;
 	call_status: CallStatus = CallStatus.None;
 	messages: ChatMessageUI[] = [];
+	selected: boolean = false; // Whether this peer is selected in the UI
 
 	constructor(public_key: INetworkedPublicKey) {
 		this.public_key = new NetworkedPublicKey(public_key);

@@ -21,7 +21,6 @@
 	function main() {
 		const unl1 = listen("client-event", async (event) => {
 			await handler.handle(event);
-			selected_peer.set(get(selected_peer)); // FIXME: This is a hack to force a re-render. This shouldn't be necessary. For some reason, the store doesn't update the UI when the peer is updated.
 		});
 
 		const unl2 = listen("tauri://file-drop-hover", async (e) => {

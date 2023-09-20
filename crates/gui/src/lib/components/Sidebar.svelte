@@ -3,12 +3,12 @@
 	import SidebarContact from "./SidebarContact.svelte";
 	import { createEventDispatcher } from "svelte";
 	import type { Writable } from "svelte/store";
-	import { selected_peer, peers } from "../ts/stores";
+	import { selected_peer, peers, select_peer } from "../ts/stores";
 
 	const dispatch = createEventDispatcher();
 
 	function on_contact_click(new_peer: UIPeer) {
-		$selected_peer = new_peer;
+		select_peer(new_peer.public_key);
 	}
 </script>
 
