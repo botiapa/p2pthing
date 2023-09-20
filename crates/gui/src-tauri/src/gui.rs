@@ -82,7 +82,6 @@ impl UI for Gui {
       .manage(state)
       .setup(move |app| {
         let main_window = app.get_window("main").unwrap();
-
         {
           let r = ui_r.clone();
           let win = main_window.clone();
@@ -97,11 +96,6 @@ impl UI for Gui {
       .invoke_handler(tauri::generate_handler![send_event, get_own_public_key])
       .build(tauri::generate_context!())
       .expect("error while running tauri application");
-    loop {
-      let iteration = app.run_iteration();
-      if iteration.window_count == 0 {
-        break;
-      }
-    }
+    app.run(|_, _| {});
   }
 }
