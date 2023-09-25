@@ -1,7 +1,11 @@
 use std::net::SocketAddr;
 
 use p2pthing_common::{
-    message_type::{msg_types, MsgType},
+    message_type::{
+        self,
+        msg_types::{self, FileChunks},
+        MsgType,
+    },
     ui::UIConn,
 };
 
@@ -19,14 +23,13 @@ impl FileHandler for ConnectionManager {
         //TODO: Ability to accept or deny file download
         match self.file_manager.get_file_chunks(data) {
             Ok(chunks) => {
-                if let Err(e) = self.send_udp_message(
-                    Some(public_key),
-                    MsgType::FileChunks,
-                    &msg_types::FileChunks { chunks },
-                    false,
-                    false,
-                ) {
-                    self.ui_s.log_error(&format!("Error while trying to send a file chunk request: {}", e.to_string()));
+                for ch in chunks {
+                    if let Err(e) =
+                        self.send_udp_message(Some(public_key.clone()), MsgType::FileChunk, &ch, false, false)
+                    {
+                        self.ui_s
+                            .log_error(&format!("Error while trying to send a file chunk request: {}", e.to_string()));
+                    }
                 }
             }
             Err(e) => self.ui_s.log_error(&format!("Failed reading file chunks: {}", &e)),
@@ -35,10 +38,11 @@ impl FileHandler for ConnectionManager {
 
     /// The client received file chunks
     fn on_file_chunks(&mut self, addr: SocketAddr, data: &[u8]) {
-        let data: msg_types::FileChunks = bincode::deserialize(data).unwrap();
+        let data: message_type::FileDataChunk = bincode::deserialize(data).unwrap();
 
         //TODO: Ability to accept or deny file download
-        if let Err(e) = self.file_manager.store_file_chunks(data) {
+        //TODO: Rename store_file_chunks and only store one chunk at a time
+        if let Err(e) = self.file_manager.store_file_chunks(FileChunks { chunks: vec![data] }) {
             self.ui_s.log_error(&format!("Error while trying to save a file chunk: {}", e));
         }
     }

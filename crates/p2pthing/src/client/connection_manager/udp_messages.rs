@@ -80,7 +80,7 @@ impl ConnectionManager {
             Some(MsgType::RequestFileChunks) => {
                 self.on_request_file_chunks(addr, &buf[1..]);
             }
-            Some(MsgType::FileChunks) => {
+            Some(MsgType::FileChunk) => {
                 self.on_file_chunks(addr, &buf[1..]);
             }
             _ => unreachable!(),

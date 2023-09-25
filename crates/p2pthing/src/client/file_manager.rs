@@ -62,7 +62,7 @@ enum FileType {
 }
 
 /// Max size of a single packet in bytes
-const CHUNK_SIZE: usize = 1 * 1000;
+const CHUNK_SIZE: usize = 1 * 800;
 /// Application identifier (this is used as the folder name under the data path)
 const APPLICATION_IDENTIFIER: &str = "p2pthing";
 /// This is where the file downloads will be placed
@@ -139,7 +139,7 @@ impl FileManager {
             assert!(x.is_none());
             let x = self.file_senders.insert(file.file_id.clone(), sender);
             assert!(x.is_none());
-            trace!(file.file_id, file.total_length);
+            trace!("Started received file({}) length: {} bytes", file.file_id, file.total_length);
         }
         self.update_requested_chunks();
         Ok(())
@@ -301,8 +301,6 @@ impl FileManager {
                     );
                 }
                 self.ui_s.send(InterthreadMessage::TransferStatistics(self.transfer_statistics.clone())).unwrap();
-
-                drop(open_file);
             }
         }
     }

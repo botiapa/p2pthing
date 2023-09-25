@@ -50,18 +50,19 @@ impl ChunkWriter {
         let index_end = index_start + data.len();
         self.mmap[index_start..index_end].copy_from_slice(&data[0..data.len()]);
 
+        // FIXME: Don't assume that the chunk was actually written to disk until we properly flush or close the memory map
+
         Ok(())
     }
 
     /// Only write until the last block index that was pushed into the buffer
-    pub fn flush_last(&mut self) -> Result<(), io::Error> {
-        self.mmap.flush().unwrap();
-        Ok(())
+    pub fn flush(&mut self) -> Result<(), io::Error> {
+        self.mmap.flush()
     }
 }
 
 impl Drop for ChunkWriter {
     fn drop(&mut self) {
-        self.flush_last().expect("Failed flushing: ");
+        self.flush().expect("Failed flushing: ");
     }
 }

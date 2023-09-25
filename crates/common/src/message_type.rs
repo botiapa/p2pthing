@@ -4,7 +4,7 @@ use std::{collections::HashMap, fmt::Display};
 
 use crate::statistics::{ConnectionStatistics, TransferStatistics};
 
-use self::msg_types::{ChatMessage, FileChunks, RequestFileChunks};
+use self::msg_types::{ChatMessage, RequestFileChunks};
 
 use super::{debug_message::DebugMessageType, encryption::NetworkedPublicKey};
 
@@ -54,7 +54,7 @@ pub enum InterthreadMessage {
     /// - **From FM to CM:** Notify CM about loaded file data chunks
     FileChunksReady(Vec<FileDataChunk>, NetworkedPublicKey),
     /// - **From CM to FM:** Store the received file data chunks
-    StoreFileChunk(FileChunks),
+    StoreFileChunk(FileChunk),
     /// - **From FM to CM:** Request the specified file chunks from the specified peers
     RequestFileChunks(HashMap<NetworkedPublicKey, Vec<FileChunk>>),
     WakeUp,
@@ -74,7 +74,7 @@ pub enum MsgType {
     MessageConfirmation = 9,
     OpusPacket = 10,
     RequestFileChunks = 11,
-    FileChunks = 12,
+    FileChunk = 12,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
