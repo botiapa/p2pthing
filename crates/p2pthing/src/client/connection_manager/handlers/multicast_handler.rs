@@ -1,6 +1,10 @@
 use std::net::SocketAddr;
 
-use p2pthing_common::{message_type::msg_types::AnnouncePublic, ui::UIConn};
+use p2pthing_common::{
+    encryption::NetworkedPublicKey,
+    message_type::{msg_types::AnnouncePublic, InterthreadMessage},
+    ui::UIConn,
+};
 
 use crate::client::{
     connection_manager::{ConnectionManager, MULTICAST_MAGIC},
@@ -42,7 +46,18 @@ impl MulticastHandler for ConnectionManager {
                         peer_type: PeerType::ClientPeer,
                     });
                 }
-                self.ui_s.log_info(&format!("Received multicast announce message: {:?}", announce.public_key))
+                self.ui_s.log_info(&format!("Received multicast announce message: {:?}", announce.public_key));
+                self.ui_s
+                    .send(InterthreadMessage::AnnounceResponse(
+                        self.peers
+                            .inner
+                            .iter()
+                            .filter(|p| p.peer_type == PeerType::ClientPeer)
+                            .map(|p| p.public_key.as_ref().unwrap().clone())
+                            .collect::<Vec<NetworkedPublicKey>>()
+                            .clone(),
+                    ))
+                    .unwrap();
             }
         }
     }
